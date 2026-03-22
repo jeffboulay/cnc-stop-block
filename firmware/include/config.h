@@ -79,15 +79,30 @@ constexpr unsigned long DUST_OFF_DELAY_MS = 3000;  // Run-down after cut
 constexpr unsigned long DEBOUNCE_MS = 50;
 
 // --- Wi-Fi ---
-#ifndef WIFI_SSID
-#define WIFI_SSID     "SmartWorkshop"
+// Credentials are stored in LittleFS (/wifi_config.json) after first-boot
+// provisioning.  They are NOT hardcoded here.  Use build flags only for
+// CI/testing environments where LittleFS is not pre-flashed:
+//   -DWIFI_SSID='"MySSID"' -DWIFI_PASS='"MyPass"'
+// At runtime the firmware always prefers LittleFS credentials over build flags.
+#ifdef WIFI_SSID
+#define WIFI_BUILD_SSID WIFI_SSID
 #endif
-#ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD ""  // Override in credentials.h or build flags
+#ifdef WIFI_PASS
+#define WIFI_BUILD_PASS WIFI_PASS
 #endif
-constexpr bool   WIFI_AP_FALLBACK     = true;
-#define AP_SSID   "CNC-StopBlock"
-#define AP_PASS   "stopblock"
+
+// Provisioning AP — device starts this when no credentials are stored.
+// Password is derived at runtime from the last 4 MAC bytes (8 hex chars).
+#define WIFI_AP_SSID  "CNC-StopBlock"
+
+// LittleFS path for persisted WiFi credentials
+constexpr const char* WIFI_CONFIG_PATH = "/wifi_config.json";
+
+// How long (ms) the device tries STA connection before falling back to AP
+constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+
+// Hold E-Stop for this long during boot to trigger a factory reset
+constexpr unsigned long FACTORY_RESET_HOLD_MS   = 10000;
 
 // --- WebSocket ---
 constexpr unsigned long WS_UPDATE_INTERVAL_MS = 100; // 10 Hz status broadcast

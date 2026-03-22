@@ -471,18 +471,19 @@ void WebAPI::onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* clie
                                AwsEventType type, void* arg, uint8_t* data, size_t len) {
     switch (type) {
         case WS_EVT_CONNECT: {
-            // Step 1.3: Validate token from query string (?token=<hex>)
-            String url = client->url();
-            int tokenPos = url.indexOf("token=");
-            if (tokenPos < 0) {
+            // Step 1.3: Validate token from query param (?token=<hex>)
+            // During WS_EVT_CONNECT, arg points to the upgrade AsyncWebServerRequest
+            AsyncWebServerRequest* wsReq = reinterpret_cast<AsyncWebServerRequest*>(arg);
+            String provided = "";
+            if (wsReq && wsReq->hasParam("token")) {
+                provided = wsReq->getParam("token")->value();
+            }
+            provided.trim();
+            if (provided.isEmpty()) {
                 Serial.printf("[WS] Rejecting client #%u — missing token\n", client->id());
                 client->close();
                 return;
             }
-            String provided = url.substring(tokenPos + 6);
-            int ampPos = provided.indexOf('&');
-            if (ampPos >= 0) provided = provided.substring(0, ampPos);
-            provided.trim();
             if (provided != _authToken) {
                 Serial.printf("[WS] Rejecting client #%u — invalid token\n", client->id());
                 client->close();

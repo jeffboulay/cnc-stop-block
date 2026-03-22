@@ -13,10 +13,12 @@
 #include "PneumaticClamps.h"
 #include "ButtonPanel.h"
 #include "CutList.h"
+#include "WiFiProvisioning.h"
 
 enum class SystemState {
     BOOT,
     WIFI_CONNECT,
+    PROVISIONING,   // AP mode: captive portal waiting for WiFi credentials
     NEEDS_HOMING,
     HOMING,
     IDLE,
@@ -85,14 +87,17 @@ private:
     PneumaticClamps*  _clamps;
     ButtonPanel*      _buttons;
     CutList*          _cutList;
+    WiFiProvisioning* _provisioning;
 
     void transitionTo(SystemState newState);
     void updateLights();
     void handleButtons();
+    void checkFactoryReset(); // Checks E-Stop hold during begin()
 
     // State handlers
     void handleBoot();
     void handleWifiConnect();
+    void handleProvisioning();
     void handleNeedsHoming();
     void handleHoming();
     void handleIdle();

@@ -6,6 +6,7 @@ const char* systemStateToString(SystemState state) {
     switch (state) {
         case SystemState::BOOT:         return "BOOT";
         case SystemState::WIFI_CONNECT: return "WIFI_CONNECT";
+        case SystemState::PROVISIONING: return "PROVISIONING";
         case SystemState::NEEDS_HOMING: return "NEEDS_HOMING";
         case SystemState::HOMING:       return "HOMING";
         case SystemState::IDLE:         return "IDLE";
@@ -32,8 +33,9 @@ SystemController::SystemController() {
     _dust    = new DustCollection(PIN_DUST_RELAY, DUST_ON_DELAY_MS, DUST_OFF_DELAY_MS);
     _lights  = new IndicatorLights(PIN_NEOPIXEL, NEOPIXEL_COUNT, LED_BRIGHTNESS);
     _clamps  = new PneumaticClamps(PIN_CLAMP_SOLENOID);
-    _buttons = new ButtonPanel(PIN_BTN_GO, PIN_BTN_HOME, PIN_BTN_LOCK, PIN_BTN_ESTOP);
-    _cutList = new CutList();
+    _buttons      = new ButtonPanel(PIN_BTN_GO, PIN_BTN_HOME, PIN_BTN_LOCK, PIN_BTN_ESTOP);
+    _cutList      = new CutList();
+    _provisioning = new WiFiProvisioning();
 }
 
 SystemController::~SystemController() {
@@ -46,6 +48,7 @@ SystemController::~SystemController() {
     delete _clamps;
     delete _buttons;
     delete _cutList;
+    delete _provisioning;
 }
 
 void SystemController::begin() {
@@ -62,6 +65,9 @@ void SystemController::begin() {
     _clamps->begin();
     _buttons->begin();
     _cutList->begin();
+
+    // Must run after lights and LittleFS are ready, before WiFi connects
+    checkFactoryReset();
 
     transitionTo(SystemState::WIFI_CONNECT);
 }
@@ -81,6 +87,7 @@ void SystemController::update() {
     switch (_state) {
         case SystemState::BOOT:         handleBoot(); break;
         case SystemState::WIFI_CONNECT: handleWifiConnect(); break;
+        case SystemState::PROVISIONING: handleProvisioning(); break;
         case SystemState::NEEDS_HOMING: handleNeedsHoming(); break;
         case SystemState::HOMING:       handleHoming(); break;
         case SystemState::IDLE:         handleIdle(); break;
@@ -237,6 +244,9 @@ void SystemController::updateLights() {
         case SystemState::WIFI_CONNECT:
             _lights->setPattern(LightPattern::CHASE_WHITE);
             break;
+        case SystemState::PROVISIONING:
+            _lights->setPattern(LightPattern::SLOW_PULSE_BLUE);
+            break;
         case SystemState::NEEDS_HOMING:
             _lights->setPattern(LightPattern::PULSE_YELLOW);
             break;
@@ -303,29 +313,89 @@ void SystemController::handleBoot() {
     // Handled in begin()
 }
 
+void SystemController::checkFactoryReset() {
+    // E-Stop is INPUT_PULLUP (set by ButtonPanel::begin()). Active LOW.
+    // Hold for FACTORY_RESET_HOLD_MS to wipe credentials and auth token.
+    if (digitalRead(PIN_BTN_ESTOP) != LOW) return;
+
+    Serial.printf("[SYS] E-Stop held — factory reset in %.0f s (release to cancel)\n",
+                  FACTORY_RESET_HOLD_MS / 1000.0f);
+
+    _lights->setPattern(LightPattern::FLASH_RED);
+    unsigned long holdStart = millis();
+
+    while (digitalRead(PIN_BTN_ESTOP) == LOW) {
+        _lights->update();
+
+        if (millis() - holdStart >= FACTORY_RESET_HOLD_MS) {
+            Serial.println("[SYS] *** FACTORY RESET TRIGGERED ***");
+            WiFiProvisioning::clearCredentials();
+            if (LittleFS.exists(AUTH_TOKEN_PATH)) {
+                LittleFS.remove(AUTH_TOKEN_PATH);
+                Serial.println("[SYS] Auth token cleared");
+            }
+            // Brief confirmation flash before reboot
+            for (int i = 0; i < 6; i++) {
+                _lights->setPattern(i % 2 ? LightPattern::SOLID_RED : LightPattern::OFF);
+                _lights->update();
+                delay(250);
+            }
+            Serial.println("[SYS] Factory reset complete — rebooting");
+            ESP.restart();
+        }
+        delay(20);
+    }
+
+    Serial.println("[SYS] Factory reset cancelled (E-Stop released)");
+    _lights->setPattern(LightPattern::CHASE_WHITE);
+}
+
 void SystemController::handleWifiConnect() {
     static bool wifiStarted = false;
 
     if (!wifiStarted) {
+        // If no credentials are stored, go straight to AP provisioning
+        if (!WiFiProvisioning::hasCredentials()) {
+            Serial.println("[WIFI] No credentials stored — entering provisioning mode");
+            wifiStarted = false;
+            _provisioning->beginAP();
+            transitionTo(SystemState::PROVISIONING);
+            return;
+        }
+
+        // Load credentials and start STA connection
+        WiFiCredentials creds;
+        if (!WiFiProvisioning::loadCredentials(creds)) {
+            Serial.println("[WIFI] Failed to read credentials — entering provisioning mode");
+            _provisioning->beginAP();
+            transitionTo(SystemState::PROVISIONING);
+            return;
+        }
+
         WiFi.mode(WIFI_STA);
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        WiFi.begin(creds.ssid.c_str(), creds.password.c_str());
         wifiStarted = true;
-        Serial.println("[WIFI] Connecting...");
+        Serial.printf("[WIFI] Connecting to %s...\n", creds.ssid.c_str());
     }
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("[WIFI] Connected: %s\n", WiFi.localIP().toString().c_str());
         wifiStarted = false;
         transitionTo(SystemState::NEEDS_HOMING);
-    } else if (millis() - _stateEnteredAt > 10000 && WIFI_AP_FALLBACK) {
-        // Fallback to AP mode after 10s
+    } else if (millis() - _stateEnteredAt > WIFI_CONNECT_TIMEOUT_MS) {
+        // Connection timed out — fall back to provisioning so the user can
+        // correct their credentials without needing a serial console
+        Serial.println("[WIFI] Connection timed out — entering provisioning mode");
         WiFi.disconnect();
-        WiFi.mode(WIFI_AP);
-        WiFi.softAP(AP_SSID, AP_PASS);
-        Serial.printf("[WIFI] AP mode: %s\n", WiFi.softAPIP().toString().c_str());
         wifiStarted = false;
-        transitionTo(SystemState::NEEDS_HOMING);
+        _provisioning->beginAP();
+        transitionTo(SystemState::PROVISIONING);
     }
+}
+
+void SystemController::handleProvisioning() {
+    // Pumps the DNS server; triggers ESP.restart() when credentials are saved
+    _provisioning->update();
 }
 
 void SystemController::handleNeedsHoming() {
