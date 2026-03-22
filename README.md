@@ -304,41 +304,51 @@ Authorization: Bearer <token>
 
 The token is generated on first boot and printed to the serial monitor. Rotate it with `POST /api/token/rotate`. The UI stores the token in `localStorage` and sends it automatically after the one-time pairing step.
 
+### Rate limiting
+
+All `POST` and `DELETE` endpoints are rate-limited per client IP to one request per **200 ms** (`RATE_LIMIT_MS` in `config.h`). Requests that arrive too quickly receive `HTTP 429 Too Many Requests`. The rate limiter is checked before authentication, so it also throttles unauthenticated flood attempts.
+
+`POST /api/estop` is **exempt** — it must never be delayed or blocked.
+
+Read-only `GET` endpoints, WebSocket broadcasts, and CORS preflight (`OPTIONS`) are never rate-limited.
+
 ### Status & Commands
 
 | Method | Endpoint               | Auth | Body                     | Description            |
 | ------ | ---------------------- | ---- | ------------------------ | ---------------------- |
 | `GET`  | `/api/status`          | —    | —                        | System status snapshot |
-| `POST` | `/api/home`            | ✓    | —                        | Start homing sequence  |
-| `POST` | `/api/goto`            | ✓    | `{"position_mm": 150.5}` | Move to position       |
-| `POST` | `/api/jog`             | ✓    | `{"distance_mm": 1.0}`   | Relative jog           |
-| `POST` | `/api/lock`            | ✓    | —                        | Engage latch           |
-| `POST` | `/api/unlock`          | ✓    | —                        | Release latch          |
-| `POST` | `/api/estop`           | ✓    | —                        | Emergency stop         |
-| `POST` | `/api/reset`           | ✓    | —                        | Clear error state      |
-| `POST` | `/api/token/rotate`    | ✓    | —                        | Rotate API token       |
+| `POST` | `/api/home`            | ✓ RL | —                        | Start homing sequence  |
+| `POST` | `/api/goto`            | ✓ RL | `{"position_mm": 150.5}` | Move to position       |
+| `POST` | `/api/jog`             | ✓ RL | `{"distance_mm": 1.0}`   | Relative jog           |
+| `POST` | `/api/lock`            | ✓ RL | —                        | Engage latch           |
+| `POST` | `/api/unlock`          | ✓ RL | —                        | Release latch          |
+| `POST` | `/api/estop`           | ✓    | —                        | Emergency stop (no RL) |
+| `POST` | `/api/reset`           | ✓ RL | —                        | Clear error state      |
+| `POST` | `/api/token/rotate`    | ✓ RL | —                        | Rotate API token       |
+
+> **RL** = rate-limited (HTTP 429 if called more than once per 200 ms from the same IP)
 
 ### Cut List
 
 | Method   | Endpoint              | Auth | Body                             | Description               |
 | -------- | --------------------- | ---- | -------------------------------- | ------------------------- |
 | `GET`    | `/api/cutlist`        | ✓    | —                                | Get all cuts              |
-| `POST`   | `/api/cutlist`        | ✓    | `[{label, length_mm, quantity}]` | Replace list              |
-| `POST`   | `/api/cutlist/add`    | ✓    | `{label, length_mm, quantity}`   | Add cut                   |
-| `DELETE` | `/api/cutlist/:index` | ✓    | —                                | Remove cut                |
-| `POST`   | `/api/cutlist/clear`  | ✓    | —                                | Clear all                 |
-| `POST`   | `/api/cutlist/reset`  | ✓    | —                                | Reset completed status    |
-| `POST`   | `/api/cut/start`      | ✓    | —                                | Start cut (dust + clamps) |
-| `POST`   | `/api/cut/end`        | ✓    | —                                | End cut                   |
-| `POST`   | `/api/cut/next`       | ✓    | —                                | Move to next cut          |
+| `POST`   | `/api/cutlist`        | ✓ RL | `[{label, length_mm, quantity}]` | Replace list              |
+| `POST`   | `/api/cutlist/add`    | ✓ RL | `{label, length_mm, quantity}`   | Add cut                   |
+| `DELETE` | `/api/cutlist/:index` | ✓ RL | —                                | Remove cut                |
+| `POST`   | `/api/cutlist/clear`  | ✓ RL | —                                | Clear all                 |
+| `POST`   | `/api/cutlist/reset`  | ✓ RL | —                                | Reset completed status    |
+| `POST`   | `/api/cut/start`      | ✓ RL | —                                | Start cut (dust + clamps) |
+| `POST`   | `/api/cut/end`        | ✓ RL | —                                | End cut                   |
+| `POST`   | `/api/cut/next`       | ✓ RL | —                                | Move to next cut          |
 
 ### Tools
 
 | Method   | Endpoint          | Auth | Body                   | Description           |
 | -------- | ----------------- | ---- | ---------------------- | --------------------- |
 | `GET`    | `/api/tools`      | ✓    | —                      | List registered tools |
-| `POST`   | `/api/tools`      | ✓    | `{uid, name, kerf_mm}` | Register tool         |
-| `DELETE` | `/api/tools/:uid` | ✓    | —                      | Remove tool           |
+| `POST`   | `/api/tools`      | ✓ RL | `{uid, name, kerf_mm}` | Register tool         |
+| `DELETE` | `/api/tools/:uid` | ✓ RL | —                      | Remove tool           |
 
 ### WebSocket
 
@@ -375,6 +385,7 @@ ANY → ERROR (stall, timeout, position mismatch)
 - **Hardware E-Stop**: Wire a normally-closed switch in series with the stepper driver ENABLE line. This cuts motor power independently of firmware.
 - **Limit switches**: Use normally-closed wiring to GND. A broken wire reads as triggered (fail-safe).
 - **Firmware guards**: Position validation, state timeouts, motion lockout during ESTOP/ERROR.
+- **Rate limiting**: All mutating API endpoints are rate-limited to 1 request per 200 ms per IP. `POST /api/estop` is explicitly exempt and is never throttled.
 
 ## Project Structure
 
