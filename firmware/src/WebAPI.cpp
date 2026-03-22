@@ -111,7 +111,7 @@ void WebAPI::setupRoutes() {
             // Response handler — called after body is received
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || !doc.containsKey("position_mm")) {
+            if (err || doc["position_mm"].isNull()) {
                 sendError(request, 400, "Invalid JSON: requires position_mm");
                 return;
             }
@@ -130,7 +130,7 @@ void WebAPI::setupRoutes() {
         [this](AsyncWebServerRequest* request) {
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || !doc.containsKey("distance_mm")) {
+            if (err || doc["distance_mm"].isNull()) {
                 sendError(request, 400, "Invalid JSON: requires distance_mm");
                 return;
             }
@@ -167,7 +167,7 @@ void WebAPI::setupRoutes() {
         [this](AsyncWebServerRequest* request) {
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || !doc.containsKey("length_mm")) {
+            if (err || doc["length_mm"].isNull()) {
                 sendError(request, 400, "Invalid JSON: requires length_mm");
                 return;
             }
@@ -229,7 +229,7 @@ void WebAPI::setupRoutes() {
         [this](AsyncWebServerRequest* request) {
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || !doc.containsKey("uid") || !doc.containsKey("name")) {
+            if (err || doc["uid"].isNull() || doc["name"].isNull()) {
                 sendError(request, 400, "Invalid JSON: requires uid, name");
                 return;
             }
