@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
 #include "config.h"
 
 class SystemController;
@@ -18,6 +19,13 @@ private:
     AsyncWebSocket _ws;
     SystemController* _controller;
     unsigned long _lastBroadcastMs = 0;
+
+    // --- Authentication (Step 1.1 – 1.3) ---
+    String _authToken;
+
+    void   loadOrCreateToken();
+    String generateToken() const;
+    bool   isAuthenticated(AsyncWebServerRequest* request) const;
 
     // Collected body for JSON POST requests (capped at MAX_POST_BODY_BYTES)
     String _bodyBuffer;
