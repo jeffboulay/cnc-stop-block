@@ -336,17 +336,48 @@ cnc-stop-block/
     └── PLAN.md
 ```
 
+## Motion Profile
+
+The stop block uses a **two-phase velocity profile** for every move:
+
+**Phase 1 — Cruise:** FastAccelStepper generates a trapezoidal profile automatically. Long moves cruise at `MAX_SPEED_MM_S`; short moves triangle-profile and never reach max speed — a 5mm jog is naturally slower than a 500mm traverse with no special handling.
+
+**Phase 2 — Approach zone:** When within `APPROACH_ZONE_MM` of the target, `StepperMotion::update()` drops speed to `APPROACH_SPEED_MM_S` regardless of move length. The block always arrives at the final position slowly for accurate latch engagement.
+
+```
+Velocity
+  │        ╭──────────────────╮
+  │       ╱   cruise speed     ╲    approach speed
+  │──────╱                      ╲──────────────────
+  └──────────────────────────────────────────────► Position
+                                ▲
+                        APPROACH_ZONE_MM from target
+```
+
+### Motion parameters
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `MAX_SPEED_MM_S` | 200 mm/s | ~300 RPM — well within NEMA 17 torque band at 24V |
+| `HOMING_SPEED_MM_S` | 15 mm/s | Conservative for reliable switch detection |
+| `ACCELERATION_MM_S2` | 800 mm/s² | Tuned for a light carriage; reduce if steps are missed |
+| `APPROACH_ZONE_MM` | 30 mm | Must be ≥ `MAX_SPEED² / (2 × ACCEL)` ≈ 25 mm |
+| `APPROACH_SPEED_MM_S` | 15 mm/s | Final positioning speed for latch accuracy |
+| `SETTLING_MS` | 350 ms | Wait after move stops before latch engages |
+
+To go faster, increase `MAX_SPEED_MM_S` and `ACCELERATION_MM_S2` together, and ensure `APPROACH_ZONE_MM` stays above `MAX_SPEED² / (2 × ACCEL)`. See `docs/PLAN.md` for the full tuning ladder.
+
 ## Configuration
 
 Edit `firmware/include/config.h` to match your hardware:
 
 - `STEPS_PER_REV` / `MICROSTEPS` / `GT2_PULLEY_TEETH` — adjust if using different stepper or pulleys
 - `MAX_TRAVEL_MM` — length of your fence rail
-- `MAX_SPEED_MM_S` / `ACCELERATION_MM_S2` — motion tuning
+- `MAX_SPEED_MM_S` / `ACCELERATION_MM_S2` / `APPROACH_ZONE_MM` / `APPROACH_SPEED_MM_S` — motion profile tuning
 - `WIFI_SSID` / `WIFI_PASSWORD` — your network (or create `credentials.h`)
 - Servo angles, debounce timing, dust collection delays, etc.
 
-Set `VITE_API_URL` environment variable in the React app to point to your ESP32 (e.g., `VITE_API_URL=http://192.168.1.100`). During development, the Vite proxy handles this automatically.
+Set `VITE_PROXY_TARGET=http://<esp32-ip>` when running the UI dev server to proxy API requests to the ESP32 (or use `http://localhost:3001` to proxy to the sim).
 
 ## License
 

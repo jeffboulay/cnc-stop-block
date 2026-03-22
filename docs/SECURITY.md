@@ -149,7 +149,16 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 | **Files**          | `ui/src/components/AddCutModal.tsx`, `ui/src/components/GoToInput.tsx`                                                                                                                                        |
 | **Impact**         | Cut labels have no max length. Quantity has no upper bound. Position values have no range check against `MAX_TRAVEL_MM`                                                                                       |
 | **Recommendation** | Add client-side validation: max label length (64 chars), quantity range (1–999), position range (0–MAX_TRAVEL_MM)                                                                                             |
-| **Solution**       | `AddCutModal`: `maxLength={64}` on label input, quantity capped 1–999, length validated 0–1200, `isFinite()` check, label truncated on submit. `GoToInput`: position validated 0–1200 with `isFinite()` check |
+| **Solution**       | `AddCutModal`: `maxLength={64}` on label input, quantity capped 1–999, length validated 0–1200, `isFinite()` check, label truncated on submit. `GoToInput`: position validated 0–1200 with `isFinite()` check, error message shown inline on validation failure, button shows loading state during pending mutation, disabled during in-flight request |
+
+#### 18. WebSocket connection status always reported as disconnected
+
+| Detail             |                                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Status**         | :white_check_mark: **Fixed**                                                                                                                                                                                  |
+| **Files**          | `ui/src/hooks/useStatus.ts` — `useIsConnected()`                                                                                                                                                              |
+| **Impact**         | `useIsConnected` used a TanStack Query with `staleTime: 0` (default). TanStack Query continuously refetched the query, and the `queryFn: () => Promise.resolve(false)` overwrote the `true` value set by the WebSocket `onopen` handler. Result: the UI always showed "Disconnected" even when the WebSocket was active, suppressing real-time DRO updates |
+| **Solution**       | Set `staleTime: Infinity`, `refetchOnWindowFocus: false`, `refetchOnMount: false`, `refetchOnReconnect: false` on the `ws_connected` query so TanStack Query never refetches it — the value is exclusively managed by `queryClient.setQueryData()` in the WebSocket hook |
 
 ---
 
@@ -183,10 +192,10 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 | --------- | ------ | ------ | ----- |
 | Critical  | 2      | 0      | 2     |
 | High      | 5      | 1      | 4     |
-| Medium    | 5      | 5      | 0     |
+| Medium    | 7      | 7      | 0     |
 | Low       | 5      | 4      | 1     |
 | Info      | 1      | —      | —     |
-| **Total** | **17** | **10** | **7** |
+| **Total** | **19** | **12** | **7** |
 
 ---
 
