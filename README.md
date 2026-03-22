@@ -356,14 +356,14 @@ Velocity
 
 ### Motion parameters
 
-| Parameter | Default | Notes |
-|---|---|---|
-| `MAX_SPEED_MM_S` | 200 mm/s | ~300 RPM — well within NEMA 17 torque band at 24V |
-| `HOMING_SPEED_MM_S` | 15 mm/s | Conservative for reliable switch detection |
-| `ACCELERATION_MM_S2` | 800 mm/s² | Tuned for a light carriage; reduce if steps are missed |
-| `APPROACH_ZONE_MM` | 30 mm | Must be ≥ `MAX_SPEED² / (2 × ACCEL)` ≈ 25 mm |
-| `APPROACH_SPEED_MM_S` | 15 mm/s | Final positioning speed for latch accuracy |
-| `SETTLING_MS` | 350 ms | Wait after move stops before latch engages |
+| Parameter             | Default   | Notes                                                  |
+| --------------------- | --------- | ------------------------------------------------------ |
+| `MAX_SPEED_MM_S`      | 200 mm/s  | ~300 RPM — well within NEMA 17 torque band at 24V      |
+| `HOMING_SPEED_MM_S`   | 150 mm/s  | Conservative for reliable switch detection             |
+| `ACCELERATION_MM_S2`  | 800 mm/s² | Tuned for a light carriage; reduce if steps are missed |
+| `APPROACH_ZONE_MM`    | 30 mm     | Must be ≥ `MAX_SPEED² / (2 × ACCEL)` ≈ 25 mm           |
+| `APPROACH_SPEED_MM_S` | 15 mm/s   | Final positioning speed for latch accuracy             |
+| `SETTLING_MS`         | 350 ms    | Wait after move stops before latch engages             |
 
 To go faster, increase `MAX_SPEED_MM_S` and `ACCELERATION_MM_S2` together, and ensure `APPROACH_ZONE_MM` stays above `MAX_SPEED² / (2 × ACCEL)`. See `docs/PLAN.md` for the full tuning ladder.
 

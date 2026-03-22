@@ -42,7 +42,7 @@ constexpr float  STEPS_PER_MM         = (float)(STEPS_PER_REV * MICROSTEPS)
 // If you see position drift after repeated cycles, lower ACCELERATION first.
 // Bump SETTLING_MS if the block oscillates before locking at higher speeds.
 constexpr float  MAX_SPEED_MM_S       = 200.0f;    // 16000 steps/s (~300 RPM)
-constexpr float  HOMING_SPEED_MM_S    = 15.0f;     // 1200 steps/s (slightly faster home)
+constexpr float  HOMING_SPEED_MM_S    = 150.0f;     // 1200 steps/s (slightly faster home)
 constexpr float  ACCELERATION_MM_S2   = 800.0f;    // 64000 steps/s^2
 constexpr float  POSITION_TOLERANCE_MM = 0.05f;
 
@@ -60,7 +60,7 @@ constexpr float  APPROACH_ZONE_MM     = 30.0f;
 constexpr float  APPROACH_SPEED_MM_S  = 15.0f;
 
 // --- Travel Limits ---
-constexpr float  MAX_TRAVEL_MM        = 1200.0f;   // Max fence length
+constexpr float  MAX_TRAVEL_MM        = 2000.0f;   // Max fence length
 constexpr float  HOME_BACKOFF_MM      = 2.0f;      // Back off after hitting home switch
 
 // --- Servo Latch ---
@@ -98,6 +98,12 @@ constexpr size_t MAX_POST_BODY_BYTES         = 16384; // 16 KB cap on POST body
 constexpr int    MAX_CUTS                    = 100;   // Max entries in cut list
 constexpr int    MAX_TOOLS                   = 50;    // Max entries in tool registry
 constexpr int    MAX_STRING_LENGTH           = 64;    // Max label/name length
+
+// --- Authentication ---
+// Token is generated on first boot, stored in LittleFS, and printed to Serial.
+// Rotate via POST /api/token/rotate. Factory-reset via E-Stop hold (Phase 2).
+constexpr const char* AUTH_TOKEN_PATH    = "/auth_token.txt";
+constexpr bool        AUTH_EXEMPT_STATUS = true;  // Allow GET /api/status without a token
 
 // --- NeoPixel ---
 constexpr uint8_t LED_BRIGHTNESS = 128;

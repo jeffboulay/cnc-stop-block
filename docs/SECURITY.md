@@ -31,20 +31,21 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 
 | Detail             |                                                                                                                                                                                                                         |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | :x: **Open**                                                                                                                                                                                                            |
-| **Files**          | `firmware/src/WebAPI.cpp`                                                                                                                                                                                               |
+| **Status**         | :white_check_mark: **Fixed**                                                                                                                                                                                            |
+| **Files**          | `firmware/src/WebAPI.cpp`, `firmware/src/WebAPI.h`, `firmware/include/config.h`, `ui/src/api/auth.ts`, `ui/src/api/client.ts`, `ui/src/api/websocket.ts`, `ui/src/components/TokenSetup.tsx`, `ui/src/App.tsx`         |
 | **Impact**         | Anyone on the WiFi network can fully control the CNC: move the stepper, engage clamps, start/stop cuts, modify the cut list, and register/remove tools                                                                  |
 | **Recommendation** | Implement API key or Bearer token authentication. Generate a device token on first boot (stored in LittleFS), require it in an `Authorization` header, and validate in WebSocket handshake before accepting connections |
+| **Solution**       | 32-byte random hex token generated via `esp_random()` on first boot, stored in `/auth_token.txt` (LittleFS), printed to Serial. All `/api/*` endpoints require `Authorization: Bearer <token>`; 401 returned otherwise. `GET /api/status` exempt when `AUTH_EXEMPT_STATUS=true`. WebSocket validates `?token=` query parameter on connect. UI stores token in `localStorage`, shows pairing screen until token is entered, sends header on all requests, clears token on 401. `POST /api/token/rotate` allows authenticated rotation. Sim mirrors the same auth flow with a per-run random token (or fixed via `SIM_TOKEN` env) |
 
 #### 2. Wildcard CORS policy
 
 | Detail             |                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | :warning: **Partially fixed**                                                                                                                                                                        |
+| **Status**         | :white_check_mark: **Fixed**                                                                                                                                                                         |
 | **Files**          | `firmware/src/WebAPI.cpp` — `addCORSHeaders()`                                                                                                                                                       |
 | **Impact**         | `Access-Control-Allow-Origin: *` allows any website to make requests to the device. Combined with no authentication, a malicious page can silently control the machine                               |
 | **Recommendation** | Restrict to the specific origin serving the UI, or remove CORS headers entirely if the UI is always served from the same origin                                                                      |
-| **Current state**  | CORS origin is configurable via `CORS_ORIGIN`, but default behavior is still wildcard (`*`) when the flag is not set. This remains exploitable on shared/trusted networks if configuration is missed |
+| **Solution**       | Wildcard default removed. `addCORSHeaders()` only sends `Access-Control-Allow-Origin` when the `-DCORS_ORIGIN="..."` build flag is explicitly set in `platformio.ini`. Cross-origin access is now opt-in, not opt-out |
 
 ---
 
@@ -190,26 +191,20 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 
 | Severity  | Total  | Fixed  | Open  |
 | --------- | ------ | ------ | ----- |
-| Critical  | 2      | 0      | 2     |
+| Critical  | 2      | 2      | 0     |
 | High      | 5      | 1      | 4     |
 | Medium    | 7      | 7      | 0     |
 | Low       | 5      | 4      | 1     |
 | Info      | 1      | —      | —     |
-| **Total** | **19** | **12** | **7** |
+| **Total** | **19** | **14** | **5** |
 
 ---
 
 ## Next Steps
 
-### P0 — API Key Authentication (#1)
+### P0 — API Key Authentication (#1) — ✅ Complete
 
-The highest-priority remaining finding. Proposed approach:
-
-1. **Token generation**: On first boot (or when no token exists in LittleFS), generate a random 32-byte hex token, store it at `/token.txt` in LittleFS, and print it to Serial
-2. **HTTP enforcement**: Require `Authorization: Bearer <token>` header on all `/api/*` endpoints. Return 401 on missing/invalid token. Exempt `/api/status` for read-only monitoring (or make this configurable)
-3. **WebSocket enforcement**: Validate token as a query parameter on the WebSocket handshake (`ws://<ip>/ws?token=<token>`). Reject connections without a valid token
-4. **UI integration**: Store token in `localStorage` after initial pairing. Add a one-time setup screen that accepts the token (displayed on Serial or a physical LCD)
-5. **Token rotation**: Provide a `/api/token/rotate` endpoint (authenticated) that generates a new token and invalidates the old one
+Implemented in `feat/api-auth-phase1`. See finding #1 above for full details.
 
 ### P1 — WiFi Credential Provisioning (#3)
 

@@ -3,12 +3,24 @@
 // In production (served from a different host), set VITE_API_URL env var.
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `API error: ${response.status}`);
+import { authHeader, clearToken } from './auth';
+
+/** Handle a non-OK fetch response — throw with the server's error message. */
+async function handleError(response: Response): Promise<never> {
+  // 401: token is wrong or missing — clear it so the pairing screen shows
+  if (response.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event('cnc:unauthorized'));
   }
+  const body = await response.json().catch(() => ({}));
+  throw new Error((body as { error?: string }).error ?? `API error: ${response.status}`);
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers: authHeader(),
+  });
+  if (!response.ok) return handleError(response);
   return response.json() as Promise<T>;
 }
 
@@ -18,21 +30,21 @@ export async function apiPost<T = { ok: boolean }>(
 ): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      ...authHeader(),
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error ?? `API error: ${response.status}`);
-  }
+  if (!response.ok) return handleError(response);
   return response.json() as Promise<T>;
 }
 
 export async function apiDelete<T = { ok: boolean }>(path: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error ?? `API error: ${response.status}`);
-  }
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  });
+  if (!response.ok) return handleError(response);
   return response.json() as Promise<T>;
 }

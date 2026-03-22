@@ -30,7 +30,7 @@ export function MainLayout() {
   const isError = status.state === 'ERROR' || status.state === 'ESTOP';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', height: '100dvh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
       {/* Top Bar */}
       <header style={{
         display: 'flex', alignItems: 'center', gap: 16,
