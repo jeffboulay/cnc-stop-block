@@ -15,6 +15,7 @@ ui/dist/
 
 # Simulator
 sim/node_modules/
+sim/.env
 
 # IDE / Tools
 .vscode/
