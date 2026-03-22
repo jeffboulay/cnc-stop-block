@@ -34,6 +34,11 @@ The ESP32 serves no static files — it only exposes a JSON API. The React UI ru
 - **Cut List Management** — Create and step through a list of cuts with quantities, persisted to flash
 - **iPad Pro Web UI** — React PWA with TanStack Query, dark theme, real-time WebSocket updates at 10 Hz
 
+## Documentation
+
+- Security review: [docs/SECURITY.md](docs/SECURITY.md)
+- Security remediation plan: [docs/SECURITY-PLAN.md](docs/SECURITY-PLAN.md)
+
 ## Hardware
 
 ### From Ender 3
@@ -153,15 +158,15 @@ curl -X POST http://localhost:3001/sim/seed
 
 The sim exposes `/sim/*` endpoints for driving the machine into specific states:
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /sim/seed` | Load sample cuts + tools, set state to IDLE |
-| `POST /sim/reset` | Reset everything to initial state |
-| `POST /sim/inject/error` | Force ERROR state with custom message |
-| `POST /sim/inject/estop` | Force ESTOP |
-| `POST /sim/inject/tool` | Simulate RFID tag present/absent |
-| `POST /sim/inject/position` | Teleport position without motion |
-| `GET /sim/state` | Dump full sim state for debugging |
+| Endpoint                    | Description                                 |
+| --------------------------- | ------------------------------------------- |
+| `POST /sim/seed`            | Load sample cuts + tools, set state to IDLE |
+| `POST /sim/reset`           | Reset everything to initial state           |
+| `POST /sim/inject/error`    | Force ERROR state with custom message       |
+| `POST /sim/inject/estop`    | Force ESTOP                                 |
+| `POST /sim/inject/tool`     | Simulate RFID tag present/absent            |
+| `POST /sim/inject/position` | Teleport position without motion            |
+| `GET /sim/state`            | Dump full sim state for debugging           |
 
 See [`sim/README.md`](sim/README.md) for full documentation, common workflows, and Wokwi firmware simulation setup.
 
