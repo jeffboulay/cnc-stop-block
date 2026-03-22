@@ -1,17 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Set VITE_PROXY_TARGET to your ESP32's IP, e.g.:
+//   VITE_PROXY_TARGET=http://192.168.1.100 npm run dev
+const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://192.168.1.100'
+
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Proxy API requests to ESP32 during development
     proxy: {
       '/api': {
-        target: 'http://192.168.1.100', // Change to your ESP32's IP
+        target: proxyTarget,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://192.168.1.100',
+        target: proxyTarget.replace(/^http/, 'ws'),
         ws: true,
       },
     },

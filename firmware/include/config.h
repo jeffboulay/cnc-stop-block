@@ -54,6 +54,13 @@ constexpr bool   WIFI_AP_FALLBACK     = true;
 
 // --- WebSocket ---
 constexpr unsigned long WS_UPDATE_INTERVAL_MS = 100; // 10 Hz status broadcast
+constexpr int    WS_MAX_CLIENTS              = 4;    // Max concurrent WebSocket connections
+
+// --- API Security ---
+constexpr size_t MAX_POST_BODY_BYTES         = 16384; // 16 KB cap on POST body
+constexpr int    MAX_CUTS                    = 100;   // Max entries in cut list
+constexpr int    MAX_TOOLS                   = 50;    // Max entries in tool registry
+constexpr int    MAX_STRING_LENGTH           = 64;    // Max label/name length
 
 // --- NeoPixel ---
 constexpr uint8_t LED_BRIGHTNESS = 128;

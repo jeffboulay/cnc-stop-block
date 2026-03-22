@@ -19,17 +19,26 @@ private:
     SystemController* _controller;
     unsigned long _lastBroadcastMs = 0;
 
-    // Collected body for JSON POST requests
+    // Collected body for JSON POST requests (capped at MAX_POST_BODY_BYTES)
     String _bodyBuffer;
+    bool   _bodyOverflow = false;
 
     void setupRoutes();
     void addCORSHeaders(AsyncWebServerResponse* response);
+    void addSecurityHeaders(AsyncWebServerResponse* response);
     void sendJSON(AsyncWebServerRequest* request, int code, const String& json);
     void sendOK(AsyncWebServerRequest* request);
     void sendError(AsyncWebServerRequest* request, int code, const String& message);
+
+    // Body accumulator with size cap
+    void onBodyChunk(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
 
     void onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                           AwsEventType type, void* arg, uint8_t* data, size_t len);
     void broadcastStatus();
     String buildStatusJSON();
+
+    // Input validation helpers
+    bool isValidFloat(float v) const;
+    String truncateString(const String& s, int maxLen) const;
 };

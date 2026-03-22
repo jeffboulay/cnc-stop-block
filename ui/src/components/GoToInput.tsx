@@ -5,9 +5,11 @@ export function GoToInput() {
   const [value, setValue] = useState('');
   const goTo = useGoTo();
 
+  const MAX_TRAVEL = 1200;
+
   const handleGo = () => {
     const num = parseFloat(value);
-    if (!isNaN(num) && num >= 0) {
+    if (!isNaN(num) && isFinite(num) && num >= 0 && num <= MAX_TRAVEL) {
       goTo.mutate({ position_mm: num });
       setValue('');
     }

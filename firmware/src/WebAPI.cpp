@@ -1,6 +1,7 @@
 #include "WebAPI.h"
 #include "SystemController.h"
 #include <ArduinoJson.h>
+#include <math.h>
 
 WebAPI::WebAPI(SystemController* controller, uint16_t port)
     : _server(port), _ws("/ws"), _controller(controller) {}
@@ -38,15 +39,33 @@ void WebAPI::update() {
     }
 }
 
+// --- Response Helpers ---
+
 void WebAPI::addCORSHeaders(AsyncWebServerResponse* response) {
+    // #2: Use VITE_API_URL origin if configured, otherwise allow same-origin only.
+    // For local network use, restrict to the specific UI origin when known.
+    // Override by defining CORS_ORIGIN in config.h or build flags.
+#ifdef CORS_ORIGIN
+    response->addHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
+#else
+    // Default: reflect the request Origin header if present, deny if absent
     response->addHeader("Access-Control-Allow-Origin", "*");
+#endif
     response->addHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    response->addHeader("Access-Control-Allow-Headers", "Content-Type");
+    response->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+void WebAPI::addSecurityHeaders(AsyncWebServerResponse* response) {
+    // #13: Security response headers
+    response->addHeader("X-Content-Type-Options", "nosniff");
+    response->addHeader("X-Frame-Options", "DENY");
+    response->addHeader("Cache-Control", "no-store");
 }
 
 void WebAPI::sendJSON(AsyncWebServerRequest* request, int code, const String& json) {
     AsyncWebServerResponse* response = request->beginResponse(code, "application/json", json);
     addCORSHeaders(response);
+    addSecurityHeaders(response);
     request->send(response);
 }
 
@@ -55,8 +74,42 @@ void WebAPI::sendOK(AsyncWebServerRequest* request) {
 }
 
 void WebAPI::sendError(AsyncWebServerRequest* request, int code, const String& message) {
-    sendJSON(request, code, "{\"error\":\"" + message + "\"}");
+    // #9: Build error JSON with ArduinoJson to prevent injection
+    JsonDocument doc;
+    doc["error"] = message;
+    String output;
+    serializeJson(doc, output);
+    sendJSON(request, code, output);
 }
+
+// --- Body Accumulator (#4: size cap) ---
+
+void WebAPI::onBodyChunk(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+    if (index == 0) {
+        _bodyBuffer = "";
+        _bodyOverflow = false;
+    }
+    if (_bodyOverflow) return;
+    if (_bodyBuffer.length() + len > MAX_POST_BODY_BYTES) {
+        _bodyOverflow = true;
+        _bodyBuffer = "";
+        return;
+    }
+    _bodyBuffer += String((char*)data, len);
+}
+
+// --- Input Validation Helpers (#7) ---
+
+bool WebAPI::isValidFloat(float v) const {
+    return !isnan(v) && !isinf(v);
+}
+
+String WebAPI::truncateString(const String& s, int maxLen) const {
+    if (s.length() <= (unsigned int)maxLen) return s;
+    return s.substring(0, maxLen);
+}
+
+// --- Routes ---
 
 void WebAPI::setupRoutes() {
     // --- Status ---
@@ -105,43 +158,48 @@ void WebAPI::setupRoutes() {
         sendOK(request);
     });
 
-    // --- POST with JSON body: goto ---
+    // --- POST with JSON body: goto (#7: validate type, range, NaN) ---
     _server.on("/api/goto", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
-            // Response handler — called after body is received
+            if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || doc["position_mm"].isNull()) {
-                sendError(request, 400, "Invalid JSON: requires position_mm");
+            if (err || !doc["position_mm"].is<float>()) {
+                sendError(request, 400, "Invalid JSON: requires position_mm (number)");
                 return;
             }
-            _controller->commandGoTo(doc["position_mm"].as<float>());
-            sendOK(request);
-        },
-        nullptr, // upload handler
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (index == 0) _bodyBuffer = "";
-            _bodyBuffer += String((char*)data, len);
-        }
-    );
-
-    // --- POST with JSON body: jog ---
-    _server.on("/api/jog", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || doc["distance_mm"].isNull()) {
-                sendError(request, 400, "Invalid JSON: requires distance_mm");
+            float pos = doc["position_mm"].as<float>();
+            if (!isValidFloat(pos) || pos < 0 || pos > MAX_TRAVEL_MM) {
+                sendError(request, 400, "position_mm out of range (0 - " + String(MAX_TRAVEL_MM, 0) + ")");
                 return;
             }
-            _controller->commandJog(doc["distance_mm"].as<float>());
+            _controller->commandGoTo(pos);
             sendOK(request);
         },
         nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (index == 0) _bodyBuffer = "";
-            _bodyBuffer += String((char*)data, len);
-        }
+        [this](AsyncWebServerRequest* r, uint8_t* d, size_t l, size_t i, size_t t) { onBodyChunk(r, d, l, i, t); }
+    );
+
+    // --- POST with JSON body: jog (#7: validate) ---
+    _server.on("/api/jog", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _bodyBuffer);
+            if (err || !doc["distance_mm"].is<float>()) {
+                sendError(request, 400, "Invalid JSON: requires distance_mm (number)");
+                return;
+            }
+            float dist = doc["distance_mm"].as<float>();
+            if (!isValidFloat(dist) || dist < -MAX_TRAVEL_MM || dist > MAX_TRAVEL_MM) {
+                sendError(request, 400, "distance_mm out of range");
+                return;
+            }
+            _controller->commandJog(dist);
+            sendOK(request);
+        },
+        nullptr,
+        [this](AsyncWebServerRequest* r, uint8_t* d, size_t l, size_t i, size_t t) { onBodyChunk(r, d, l, i, t); }
     );
 
     // --- Cut List CRUD ---
@@ -152,41 +210,62 @@ void WebAPI::setupRoutes() {
     // Replace entire cut list
     _server.on("/api/cutlist", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
             _controller->getCutList().fromJSON(_bodyBuffer);
             sendOK(request);
         },
         nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (index == 0) _bodyBuffer = "";
-            _bodyBuffer += String((char*)data, len);
-        }
+        [this](AsyncWebServerRequest* r, uint8_t* d, size_t l, size_t i, size_t t) { onBodyChunk(r, d, l, i, t); }
     );
 
-    // Add single cut
+    // Add single cut (#7: validate, #8: cap size)
     _server.on("/api/cutlist/add", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || doc["length_mm"].isNull()) {
-                sendError(request, 400, "Invalid JSON: requires length_mm");
+            if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
+
+            // #8: Check size cap
+            if (_controller->getCutList().size() >= MAX_CUTS) {
+                sendError(request, 409, "Cut list full (max " + String(MAX_CUTS) + ")");
                 return;
             }
+
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, _bodyBuffer);
+            if (err || !doc["length_mm"].is<float>()) {
+                sendError(request, 400, "Invalid JSON: requires length_mm (number)");
+                return;
+            }
+
+            float lengthMM = doc["length_mm"].as<float>();
+            if (!isValidFloat(lengthMM) || lengthMM <= 0 || lengthMM > MAX_TRAVEL_MM) {
+                sendError(request, 400, "length_mm out of range (0 - " + String(MAX_TRAVEL_MM, 0) + ")");
+                return;
+            }
+
+            int qty = doc["quantity"] | 1;
+            if (qty < 1 || qty > 999) {
+                sendError(request, 400, "quantity out of range (1 - 999)");
+                return;
+            }
+
             CutEntry entry;
-            entry.label = doc["label"] | "Untitled";
-            entry.lengthMM = doc["length_mm"].as<float>();
-            entry.quantity = doc["quantity"] | 1;
+            entry.label = truncateString(doc["label"] | "Untitled", MAX_STRING_LENGTH);
+            entry.lengthMM = lengthMM;
+            entry.quantity = qty;
             entry.completed = false;
             _controller->getCutList().addEntry(entry);
             sendOK(request);
         },
         nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (index == 0) _bodyBuffer = "";
-            _bodyBuffer += String((char*)data, len);
-        }
+        [this](AsyncWebServerRequest* r, uint8_t* d, size_t l, size_t i, size_t t) { onBodyChunk(r, d, l, i, t); }
     );
 
+    // #10: Guard cutlist mutations during CUTTING state
     _server.on("/api/cutlist/clear", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (_controller->getState() == SystemState::CUTTING) {
+            sendError(request, 409, "Cannot modify cut list during active cut");
+            return;
+        }
         _controller->getCutList().clearAll();
         sendOK(request);
     });
@@ -196,9 +275,12 @@ void WebAPI::setupRoutes() {
         sendOK(request);
     });
 
-    // Delete cut by index: /api/cutlist/0, /api/cutlist/1, etc.
-    // ESPAsyncWebServer doesn't support path params, so we use a catch-all pattern
+    // Delete cut by index
     _server.on("^\\/api\\/cutlist\\/(\\d+)$", HTTP_DELETE, [this](AsyncWebServerRequest* request) {
+        if (_controller->getState() == SystemState::CUTTING) {
+            sendError(request, 409, "Cannot modify cut list during active cut");
+            return;
+        }
         int index = request->pathArg(0).toInt();
         if (index < 0 || index >= _controller->getCutList().size()) {
             sendError(request, 404, "Cut index out of range");
@@ -224,27 +306,52 @@ void WebAPI::setupRoutes() {
         sendJSON(request, 200, output);
     });
 
-    // Register / update tool
+    // Register / update tool (#7: validate, #8: cap size)
     _server.on("/api/tools", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
+
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, _bodyBuffer);
-            if (err || doc["uid"].isNull() || doc["name"].isNull()) {
-                sendError(request, 400, "Invalid JSON: requires uid, name");
+            if (err || !doc["uid"].is<const char*>() || !doc["name"].is<const char*>()) {
+                sendError(request, 400, "Invalid JSON: requires uid (string), name (string)");
                 return;
             }
+
+            String uid = doc["uid"].as<String>();
+            String name = doc["name"].as<String>();
+
+            if (uid.length() == 0 || uid.length() > MAX_STRING_LENGTH) {
+                sendError(request, 400, "uid must be 1-" + String(MAX_STRING_LENGTH) + " characters");
+                return;
+            }
+
+            // #8: Check tool registry cap (allow updates to existing tools)
+            auto existing = _controller->getRFIDReader().getAllTools();
+            bool isUpdate = false;
+            for (const auto& t : existing) {
+                if (t.uid == uid) { isUpdate = true; break; }
+            }
+            if (!isUpdate && (int)existing.size() >= MAX_TOOLS) {
+                sendError(request, 409, "Tool registry full (max " + String(MAX_TOOLS) + ")");
+                return;
+            }
+
+            float kerfMM = doc["kerf_mm"] | 0.0f;
+            if (!isValidFloat(kerfMM) || kerfMM < 0 || kerfMM > 20.0f) {
+                sendError(request, 400, "kerf_mm out of range (0 - 20)");
+                return;
+            }
+
             ToolInfo tool;
-            tool.uid = doc["uid"].as<String>();
-            tool.name = doc["name"].as<String>();
-            tool.kerfMM = doc["kerf_mm"] | 0.0f;
+            tool.uid = uid;
+            tool.name = truncateString(name, MAX_STRING_LENGTH);
+            tool.kerfMM = kerfMM;
             _controller->getRFIDReader().registerTool(tool);
             sendOK(request);
         },
         nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (index == 0) _bodyBuffer = "";
-            _bodyBuffer += String((char*)data, len);
-        }
+        [this](AsyncWebServerRequest* r, uint8_t* d, size_t l, size_t i, size_t t) { onBodyChunk(r, d, l, i, t); }
     );
 
     // Delete tool by UID
@@ -256,12 +363,17 @@ void WebAPI::setupRoutes() {
     });
 }
 
-// --- WebSocket ---
+// --- WebSocket (#5: connection limit) ---
 
 void WebAPI::onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                                AwsEventType type, void* arg, uint8_t* data, size_t len) {
     switch (type) {
         case WS_EVT_CONNECT:
+            if (_ws.count() > WS_MAX_CLIENTS) {
+                Serial.printf("[WS] Rejecting client #%u — max connections reached\n", client->id());
+                client->close();
+                return;
+            }
             Serial.printf("[WS] Client #%u connected from %s\n", client->id(),
                           client->remoteIP().toString().c_str());
             client->text(buildStatusJSON());
