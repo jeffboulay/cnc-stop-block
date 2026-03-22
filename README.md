@@ -133,9 +133,20 @@ npm run build
 
 Open the dev server URL on your iPad Pro. Tap **Share > Add to Home Screen** for a full-screen kiosk experience.
 
-### First-boot pairing
+### First-boot WiFi setup
 
-The ESP32 generates a random 64-character API token on first boot, stores it in flash, and prints it to the serial monitor:
+On first boot the device has no WiFi credentials and automatically enters **provisioning mode**:
+
+1. It starts a SoftAP named `CNC-StopBlock` — password is 8 hex chars derived from the device MAC, printed to the serial monitor
+2. Connect your phone or laptop to that network — a captive-portal page opens automatically
+3. Pick your home network from the dropdown, enter the password, and tap **Connect & Save**
+4. The device reboots and joins your network
+
+If you move the device to a new network and it can't connect, it falls back to provisioning mode automatically after 15 seconds.
+
+### First-boot API pairing
+
+After the device joins your WiFi it generates a random 64-character API token, stores it in flash, and prints it to the serial monitor:
 
 ```
 [AUTH] *** NEW API TOKEN GENERATED ***
@@ -153,7 +164,13 @@ curl -X POST http://<esp32-ip>/api/token/rotate \
 # → {"token":"<new-token>"}
 ```
 
-After rotation, the UI detects the 401 response on its next request, clears the stored token, and returns to the pairing screen automatically.
+After rotation, the UI detects the 401 on its next request, clears the stored token, and returns to the pairing screen automatically.
+
+### Factory reset
+
+Hold the **E-Stop button for 10 seconds during boot** to wipe both the WiFi credentials and the API token. The indicator strip flashes red during the countdown and confirms with a solid flash on success, then reboots into provisioning mode.
+
+> This lets you recover the device without a serial cable when moving it to a new network.
 
 ## Development Without Hardware
 
@@ -330,13 +347,28 @@ The token is generated on first boot and printed to the serial monitor. Rotate i
 ## State Machine
 
 ```
-BOOT → WIFI_CONNECT → NEEDS_HOMING → HOMING → IDLE
+BOOT → WIFI_CONNECT ──┬→ NEEDS_HOMING → HOMING → IDLE
+                      └→ PROVISIONING  (no/bad credentials → captive portal → reboot)
+
 IDLE → UNLOCKING → MOVING → SETTLING → LOCKING → LOCKED
 LOCKED → DUST_SPINUP → CUTTING → LOCKED
 LOCKED → UNLOCKING (new position)
 ANY → ESTOP (hardware interrupt)
 ANY → ERROR (stall, timeout, position mismatch)
 ```
+
+| State | LED | Description |
+|---|---|---|
+| `BOOT` / `WIFI_CONNECT` | Chase white | Startup and WiFi association |
+| `PROVISIONING` | Slow pulse blue | AP mode — captive portal open |
+| `NEEDS_HOMING` | Pulse yellow | Waiting for home command |
+| `HOMING` | Solid blue | Running homing sequence |
+| `IDLE` / `LOCKED` | Solid green | Ready |
+| `MOVING` | Pulse yellow | Block in motion |
+| `SETTLING` / `LOCKING` / `UNLOCKING` | Pulse green | Transition |
+| `DUST_SPINUP` / `CUTTING` | Solid orange | Cut in progress |
+| `ERROR` | Solid red | Fault — check serial |
+| `ESTOP` | Flash red | Emergency stop active |
 
 ## Safety
 
@@ -373,6 +405,7 @@ cnc-stop-block/
 │       ├── PneumaticClamps.*    # Solenoid valve control
 │       ├── ButtonPanel.*        # Debounced buttons
 │       ├── WebAPI.*             # REST API + WebSocket
+│       ├── WiFiProvisioning.*   # Captive-portal first-boot WiFi setup
 │       └── CutList.*            # Cut list persistence
 ├── ui/                          # React + Vite + TanStack Query
 │   ├── package.json

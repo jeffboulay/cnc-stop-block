@@ -47,6 +47,9 @@ void IndicatorLights::update() {
         case LightPattern::CHASE_WHITE:
             animateChase(255, 255, 255);
             break;
+        case LightPattern::SLOW_PULSE_BLUE:
+            animateSlowPulse(0, 100, 255);
+            break;
     }
 }
 
@@ -68,6 +71,26 @@ void IndicatorLights::animatePulse(uint8_t r, uint8_t g, uint8_t b) {
 
     for (uint16_t i = 0; i < _strip.numPixels(); i++) {
         _strip.setPixelColor(i, (uint8_t)(r * scale), (uint8_t)(g * scale), (uint8_t)(b * scale));
+    }
+    _strip.show();
+}
+
+void IndicatorLights::animateSlowPulse(uint8_t r, uint8_t g, uint8_t b) {
+    // ~2 second triangle-wave cycle (50 ms ticks × 200 frames = 10 s — too slow)
+    // Use 40 ms ticks × 100 frames → 4 s, which reads as "waiting" not "busy"
+    if (millis() - _lastAnimMs < 40) return;
+    _lastAnimMs = millis();
+
+    _animFrame = (_animFrame + 1) % 100;
+    // Triangle wave: ramps 0→100 then 100→0 over 100 frames
+    uint8_t brightness = _animFrame < 50 ? _animFrame * 2 : (100 - _animFrame) * 2;
+    float scale = brightness / 100.0f;
+
+    for (uint16_t i = 0; i < _strip.numPixels(); i++) {
+        _strip.setPixelColor(i,
+            (uint8_t)(r * scale),
+            (uint8_t)(g * scale),
+            (uint8_t)(b * scale));
     }
     _strip.show();
 }

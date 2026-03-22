@@ -15,7 +15,7 @@ This plan addresses the 7 open security findings in four phases, ordered by seve
 |---|----------|---------|-------|--------|
 | 1 | CRITICAL | No API authentication | Phase 1 | ✅ Complete |
 | 2 | CRITICAL | CORS wildcard default | Phase 1 | ✅ Complete |
-| 3 | HIGH | WiFi credentials hardcoded | Phase 2 | Open |
+| 3 | HIGH | WiFi credentials hardcoded | Phase 2 | ✅ Complete |
 | 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 | Open |
 | 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 | Open |
 | 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 | Open |
@@ -114,14 +114,14 @@ Files:
 
 ---
 
-## Phase 2: WiFi Credential Provisioning
+## Phase 2: WiFi Credential Provisioning ✅ Complete
 
-Priority: High
+Priority: High — shipped in `feat/api-auth-phase1` (PR #7)
 Dependency: Phase 1 should be complete before provisioning is exposed.
 
 This phase removes hardcoded credentials and adds a first-boot provisioning flow.
 
-### Step 2.1: Credential storage in LittleFS
+### Step 2.1: Credential storage in LittleFS ✅
 
 - Add `firmware/src/WiFiProvisioning.h` and `firmware/src/WiFiProvisioning.cpp`
 - Implement `loadCredentials()`, `saveCredentials()`, `clearCredentials()`, and `hasCredentials()`
@@ -133,7 +133,7 @@ Files:
 - `firmware/src/WiFiProvisioning.cpp`
 - `firmware/include/config.h`
 
-### Step 2.2: AP mode with device-derived password
+### Step 2.2: AP mode with device-derived password ✅
 
 - If no credentials are stored, start AP mode
 - Use SSID `CNC-StopBlock`
@@ -146,7 +146,7 @@ Files:
 - `firmware/src/SystemController.cpp`
 - `firmware/src/IndicatorLights.cpp`
 
-### Step 2.3: Captive portal
+### Step 2.3: Captive portal ✅
 
 - Serve a minimal provisioning page at `192.168.4.1`
 - Scan nearby WiFi networks and show them in a dropdown
@@ -155,7 +155,7 @@ Files:
 Files:
 - `firmware/src/WiFiProvisioning.cpp`
 
-### Step 2.4: Factory reset via E-Stop hold
+### Step 2.4: Factory reset via E-Stop hold ✅
 
 - During boot, if the E-Stop button is held for 10 seconds, wipe saved credentials and the auth token
 - Reboot into AP provisioning mode
@@ -167,10 +167,11 @@ Files:
 
 ### Verification
 
-- Device boots into AP mode when no credentials are stored
-- Provisioning UI lists nearby networks
-- Device connects successfully after provisioning
-- E-Stop hold performs a factory reset
+- [x] Device boots into AP mode when no credentials are stored
+- [x] Provisioning UI lists nearby networks
+- [x] Device connects successfully after provisioning
+- [x] E-Stop hold performs a factory reset
+- [x] `pio run` succeeds
 
 ---
 

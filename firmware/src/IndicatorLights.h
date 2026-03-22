@@ -14,6 +14,7 @@ enum class LightPattern {
     CHASE_WHITE,     // BOOT / WIFI_CONNECT
     PULSE_GREEN,     // SETTLING / LOCKING
     SOLID_ORANGE,    // DUST_SPINUP / CUTTING
+    SLOW_PULSE_BLUE, // PROVISIONING — AP mode waiting for credentials
 };
 
 class IndicatorLights {
@@ -32,6 +33,7 @@ private:
 
     void setSolid(uint32_t color);
     void animatePulse(uint8_t r, uint8_t g, uint8_t b);
+    void animateSlowPulse(uint8_t r, uint8_t g, uint8_t b); // ~2 s per cycle
     void animateFlash(uint8_t r, uint8_t g, uint8_t b);
     void animateChase(uint8_t r, uint8_t g, uint8_t b);
 };

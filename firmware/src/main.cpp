@@ -18,12 +18,20 @@ void setup() {
     Serial.println("=================================");
 
     // #12: Initialize task watchdog timer
-    esp_task_wdt_config_t wdt_config = {
-        .timeout_ms = WDT_TIMEOUT_S * 1000,
-        .idle_core_mask = 0,
-        .trigger_panic = true
-    };
-    esp_task_wdt_init(&wdt_config);
+    // esp_task_wdt_config_t / struct API was added in IDF v5.
+    // Use the IDF v4-compatible signature here (timeout_s, panic_on_timeout).
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    {
+        esp_task_wdt_config_t wdt_cfg = {
+            .timeout_ms  = (uint32_t)(WDT_TIMEOUT_S * 1000),
+            .idle_core_mask = 0,
+            .trigger_panic  = true
+        };
+        esp_task_wdt_init(&wdt_cfg);
+    }
+#else
+    esp_task_wdt_init(WDT_TIMEOUT_S, /*panic=*/true);
+#endif
     esp_task_wdt_add(NULL); // Subscribe current task (loopTask)
 
     controller.begin();
