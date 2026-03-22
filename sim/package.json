@@ -1,0 +1,24 @@
+{
+  "name": "cnc-stop-block-sim",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mock ESP32 server for CNC Stop Block — simulates the full REST API and WebSocket without hardware",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}

@@ -12,6 +12,9 @@ credentials.h
 ui/node_modules/
 ui/dist/
 
+# Simulator
+sim/node_modules/
+
 # IDE / Tools
 .vscode/
 .claude/

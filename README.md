@@ -128,6 +128,43 @@ npm run build
 
 Open the dev server URL on your iPad Pro. Tap **Share > Add to Home Screen** for a full-screen kiosk experience.
 
+## Development Without Hardware
+
+A mock ESP32 server in `sim/` lets you build and test the React UI before the physical machine exists. It runs the full state machine with realistic timing — no ESP32 required.
+
+```bash
+# Terminal 1 — start the mock ESP32
+cd sim
+npm install
+npm run dev
+
+# Terminal 2 — start the UI, pointed at the sim
+cd ui
+VITE_PROXY_TARGET=http://localhost:3001 npm run dev
+```
+
+Then seed the sim with sample data:
+
+```bash
+curl -X POST http://localhost:3001/sim/seed
+```
+
+### Simulation controls
+
+The sim exposes `/sim/*` endpoints for driving the machine into specific states:
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /sim/seed` | Load sample cuts + tools, set state to IDLE |
+| `POST /sim/reset` | Reset everything to initial state |
+| `POST /sim/inject/error` | Force ERROR state with custom message |
+| `POST /sim/inject/estop` | Force ESTOP |
+| `POST /sim/inject/tool` | Simulate RFID tag present/absent |
+| `POST /sim/inject/position` | Teleport position without motion |
+| `GET /sim/state` | Dump full sim state for debugging |
+
+See [`sim/README.md`](sim/README.md) for full documentation, common workflows, and Wokwi firmware simulation setup.
+
 ## Troubleshooting
 
 ### PlatformIO says this is not a project
@@ -255,6 +292,13 @@ ANY → ERROR (stall, timeout, position mismatch)
 
 ```
 cnc-stop-block/
+├── sim/                         # Mock ESP32 server (dev without hardware)
+│   ├── src/
+│   │   ├── server.ts            # HTTP + WebSocket entry point
+│   │   ├── machine.ts           # State machine (mirrors SystemController.cpp)
+│   │   ├── api.ts               # Express routes (mirrors WebAPI.cpp)
+│   │   └── types.ts             # Shared types
+│   └── README.md
 ├── firmware/                    # ESP32 PlatformIO project
 │   ├── platformio.ini
 │   ├── include/
