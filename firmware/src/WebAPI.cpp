@@ -112,6 +112,59 @@ bool WebAPI::isAuthenticated(AsyncWebServerRequest* request) const {
     return provided == _authToken;
 }
 
+// --- Rate Limiting (Step 3.1) ---
+//
+// Algorithm: fixed-size table of { ipv4, lastCommandMs }.
+//   - On each mutating request, look up the caller's packed IPv4.
+//   - If found and (now - lastCommandMs) < RATE_LIMIT_MS → reject with 429.
+//   - Otherwise record now and allow the request.
+//   - If the table is full the entry with the oldest timestamp is evicted
+//     (LRU-style) to make room for the new IP.
+//
+// IPv4 is packed as a uint32_t so comparisons are a single integer operation.
+
+bool WebAPI::isRateLimited(AsyncWebServerRequest* request) {
+    IPAddress ip   = request->client()->remoteIP();
+    uint32_t  ipv4 = (uint32_t(ip[0]) << 24) |
+                     (uint32_t(ip[1]) << 16) |
+                     (uint32_t(ip[2]) <<  8) |
+                      uint32_t(ip[3]);
+    unsigned long now = millis();
+
+    // Search for an existing entry for this IP
+    for (int i = 0; i < RATE_LIMIT_TABLE_SIZE; i++) {
+        if (_rateTable[i].ipv4 == ipv4) {
+            unsigned long elapsed = now - _rateTable[i].lastCommandMs;
+            if (elapsed < RATE_LIMIT_MS) {
+                // Too soon — reject
+                Serial.printf("[RL] Rate-limited %d.%d.%d.%d (last cmd %lums ago)\n",
+                              ip[0], ip[1], ip[2], ip[3], elapsed);
+                sendError(request, 429, "Too many requests");
+                return true;
+            }
+            // Allowed — update timestamp in-place
+            _rateTable[i].lastCommandMs = now;
+            return false;
+        }
+    }
+
+    // New IP — find an empty slot or evict the oldest entry
+    int target = 0;
+    for (int i = 1; i < RATE_LIMIT_TABLE_SIZE; i++) {
+        if (_rateTable[i].ipv4 == 0) {
+            // Empty slot — use immediately
+            target = i;
+            break;
+        }
+        if (_rateTable[i].lastCommandMs < _rateTable[target].lastCommandMs) {
+            target = i; // Track oldest for eviction
+        }
+    }
+
+    _rateTable[target] = { ipv4, now };
+    return false;
+}
+
 // --- Response Helpers ---
 
 void WebAPI::addCORSHeaders(AsyncWebServerResponse* response) {
@@ -189,6 +242,7 @@ void WebAPI::setupRoutes() {
 
     // --- Token rotation (Step 1.7) ---
     _server.on("/api/token/rotate", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _authToken = generateToken();
         if (LittleFS.begin(false)) {
@@ -202,11 +256,13 @@ void WebAPI::setupRoutes() {
 
     // --- Simple POST commands (no body needed) ---
     _server.on("/api/home", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandHome();
         sendOK(request);
     });
 
+    // E-Stop is exempt from rate limiting — safety critical, must never be throttled
     _server.on("/api/estop", HTTP_POST, [this](AsyncWebServerRequest* request) {
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandEStop();
@@ -214,36 +270,42 @@ void WebAPI::setupRoutes() {
     });
 
     _server.on("/api/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandResetError();
         sendOK(request);
     });
 
     _server.on("/api/lock", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandLock();
         sendOK(request);
     });
 
     _server.on("/api/unlock", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandUnlock();
         sendOK(request);
     });
 
     _server.on("/api/cut/start", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandStartCut();
         sendOK(request);
     });
 
     _server.on("/api/cut/end", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandEndCut();
         sendOK(request);
     });
 
     _server.on("/api/cut/next", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->commandNextCut();
         sendOK(request);
@@ -252,6 +314,7 @@ void WebAPI::setupRoutes() {
     // --- POST with JSON body: goto (#7: validate type, range, NaN) ---
     _server.on("/api/goto", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (isRateLimited(request)) return;
             if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
             if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
             JsonDocument doc;
@@ -275,6 +338,7 @@ void WebAPI::setupRoutes() {
     // --- POST with JSON body: jog (#7: validate) ---
     _server.on("/api/jog", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (isRateLimited(request)) return;
             if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
             if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
             JsonDocument doc;
@@ -304,6 +368,7 @@ void WebAPI::setupRoutes() {
     // Replace entire cut list
     _server.on("/api/cutlist", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (isRateLimited(request)) return;
             if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
             if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
             _controller->getCutList().fromJSON(_bodyBuffer);
@@ -316,6 +381,7 @@ void WebAPI::setupRoutes() {
     // Add single cut (#7: validate, #8: cap size)
     _server.on("/api/cutlist/add", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (isRateLimited(request)) return;
             if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
             if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
 
@@ -358,6 +424,7 @@ void WebAPI::setupRoutes() {
 
     // #10: Guard cutlist mutations during CUTTING state
     _server.on("/api/cutlist/clear", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         if (_controller->getState() == SystemState::CUTTING) {
             sendError(request, 409, "Cannot modify cut list during active cut");
@@ -368,6 +435,7 @@ void WebAPI::setupRoutes() {
     });
 
     _server.on("/api/cutlist/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         _controller->getCutList().reset();
         sendOK(request);
@@ -375,6 +443,7 @@ void WebAPI::setupRoutes() {
 
     // Delete cut by index
     _server.on("^\\/api\\/cutlist\\/(\\d+)$", HTTP_DELETE, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         if (_controller->getState() == SystemState::CUTTING) {
             sendError(request, 409, "Cannot modify cut list during active cut");
@@ -409,6 +478,7 @@ void WebAPI::setupRoutes() {
     // Register / update tool (#7: validate, #8: cap size)
     _server.on("/api/tools", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
+            if (isRateLimited(request)) return;
             if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
             if (_bodyOverflow) { sendError(request, 413, "Request body too large"); return; }
 
@@ -457,6 +527,7 @@ void WebAPI::setupRoutes() {
 
     // Delete tool by UID
     _server.on("^\\/api\\/tools\\/([A-Fa-f0-9]+)$", HTTP_DELETE, [this](AsyncWebServerRequest* request) {
+        if (isRateLimited(request)) return;
         if (!isAuthenticated(request)) { sendError(request, 401, "Unauthorized"); return; }
         String uid = request->pathArg(0);
         uid.toUpperCase();

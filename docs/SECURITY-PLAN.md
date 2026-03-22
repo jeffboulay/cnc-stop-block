@@ -16,8 +16,8 @@ This plan addresses the 7 open security findings in four phases, ordered by seve
 | 1 | CRITICAL | No API authentication | Phase 1 | ✅ Complete |
 | 2 | CRITICAL | CORS wildcard default | Phase 1 | ✅ Complete |
 | 3 | HIGH | WiFi credentials hardcoded | Phase 2 | ✅ Complete |
-| 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 | Open |
-| 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 | Open |
+| 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 | ✅ Complete |
+| 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 | ✅ Complete |
 | 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 | Open |
 | 16 | LOW | Error messages shown directly | Phase 4 | Open |
 
@@ -175,14 +175,14 @@ Files:
 
 ---
 
-## Phase 3: Rate Limiting
+## Phase 3: Rate Limiting ✅ Complete
 
-Priority: High
+Priority: High — shipped in `feat/rate-limiting-phase3` (PR #9)
 Dependency: None. This can proceed in parallel with Phase 2.
 
 This phase limits command flooding against the control API.
 
-### Step 3.1: Per-IP rate limiter
+### Step 3.1: Per-IP rate limiter ✅
 
 - Add `RateLimitEntry { IPAddress ip; unsigned long lastCommandMs; }` in `firmware/src/WebAPI.h`
 - Maintain a fixed-size entry list with simple eviction
@@ -194,7 +194,7 @@ Files:
 - `firmware/src/WebAPI.cpp`
 - `firmware/include/config.h`
 
-### Step 3.2: Apply limits to command endpoints
+### Step 3.2: Apply limits to command endpoints ✅
 
 - Apply rate limiting to POST and DELETE handlers
 - Exempt read-only GET routes, OPTIONS preflight, and WebSocket broadcasts
@@ -202,11 +202,20 @@ Files:
 Files:
 - `firmware/src/WebAPI.cpp`
 
+### Design notes
+
+- `POST /api/estop` is **exempt** from rate limiting — safety-critical and must never be throttled
+- Rate limiting is checked **before** auth so unauthenticated flood attempts are also blocked
+- The table tracks up to `RATE_LIMIT_TABLE_SIZE` (8) IPs concurrently; the oldest slot is evicted when full
+- `RATE_LIMIT_MS` (200 ms) allows comfortable interactive use while blocking automated flooding
+
 ### Verification
 
-- Rapid repeated POST or DELETE requests from the same IP receive HTTP 429
-- Normal UI interaction remains unaffected
-- Read-only status polling is not rate-limited
+- [x] Rapid repeated POST or DELETE requests from the same IP receive HTTP 429
+- [x] `POST /api/estop` is never rate-limited
+- [x] Normal UI interaction remains unaffected (button taps are well over 200 ms apart)
+- [x] Read-only GET routes and WebSocket broadcasts are not rate-limited
+- [x] `pio run` succeeds
 
 ---
 

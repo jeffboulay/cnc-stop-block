@@ -114,6 +114,19 @@ constexpr int    MAX_CUTS                    = 100;   // Max entries in cut list
 constexpr int    MAX_TOOLS                   = 50;    // Max entries in tool registry
 constexpr int    MAX_STRING_LENGTH           = 64;    // Max label/name length
 
+// --- Rate Limiting ---
+// Minimum gap (ms) required between successive mutating requests from the
+// same client IP.  A 200 ms window lets the UI send one command per button
+// tap comfortably while blocking flood/automation abuse.
+//
+// The limiter covers all POST and DELETE endpoints.  Read-only GETs,
+// WebSocket broadcasts, and OPTIONS preflight are exempt.
+//
+// RATE_LIMIT_TABLE_SIZE: how many distinct IPs to track concurrently.
+// When the table is full the oldest entry is evicted (LRU).
+constexpr unsigned long RATE_LIMIT_MS         = 200;  // Min ms between commands per IP
+constexpr int           RATE_LIMIT_TABLE_SIZE = 8;    // Concurrent client IPs tracked
+
 // --- Authentication ---
 // Token is generated on first boot, stored in LittleFS, and printed to Serial.
 // Rotate via POST /api/token/rotate. Factory-reset via E-Stop hold (Phase 2).
