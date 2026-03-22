@@ -113,6 +113,7 @@ void SystemController::commandHome() {
 }
 
 void SystemController::commandGoTo(float positionMM) {
+    // #10: Only allow GoTo from IDLE or LOCKED — block during MOVING, CUTTING, etc.
     if (_state != SystemState::IDLE && _state != SystemState::LOCKED) return;
     if (positionMM < 0 || positionMM > MAX_TRAVEL_MM) return;
 

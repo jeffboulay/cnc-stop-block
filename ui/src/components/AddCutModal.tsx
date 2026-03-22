@@ -11,12 +11,23 @@ export function AddCutModal({ onClose }: Props) {
   const [qty, setQty] = useState('1');
   const addCut = useAddCut();
 
+  const MAX_LABEL_LENGTH = 64;
+  const MAX_TRAVEL = 1200;
+  const MAX_QUANTITY = 999;
+
   const handleSave = () => {
     const len = parseFloat(length);
-    if (isNaN(len) || len <= 0) return;
+    const q = parseInt(qty) || 1;
+
+    if (isNaN(len) || !isFinite(len) || len <= 0 || len > MAX_TRAVEL) return;
+    if (q < 1 || q > MAX_QUANTITY) return;
 
     addCut.mutate(
-      { label: label || `Cut`, length_mm: len, quantity: parseInt(qty) || 1 },
+      {
+        label: (label || 'Cut').slice(0, MAX_LABEL_LENGTH),
+        length_mm: len,
+        quantity: q,
+      },
       { onSuccess: onClose },
     );
   };
@@ -48,6 +59,7 @@ export function AddCutModal({ onClose }: Props) {
         <label style={{ display: 'block', marginBottom: 12, fontSize: 14, color: 'var(--text-dim)' }}>
           Label
           <input type="text" placeholder="e.g. Shelf Side A" value={label}
+            maxLength={MAX_LABEL_LENGTH}
             onChange={(e) => setLabel(e.target.value)} style={inputStyle} />
         </label>
 
@@ -59,7 +71,7 @@ export function AddCutModal({ onClose }: Props) {
 
         <label style={{ display: 'block', marginBottom: 12, fontSize: 14, color: 'var(--text-dim)' }}>
           Quantity
-          <input type="number" min="1" max="100" value={qty}
+          <input type="number" min="1" max={MAX_QUANTITY} value={qty}
             onChange={(e) => setQty(e.target.value)} style={inputStyle} />
         </label>
 
