@@ -1,9 +1,9 @@
 #include <Arduino.h>
 #include "SystemController.h"
-#include "WebUI.h"
+#include "WebAPI.h"
 
 SystemController controller;
-WebUI* webUI = nullptr;
+WebAPI* webAPI = nullptr;
 
 void setup() {
     Serial.begin(115200);
@@ -15,11 +15,11 @@ void setup() {
 
     controller.begin();
 
-    webUI = new WebUI(&controller);
-    webUI->begin();
+    webAPI = new WebAPI(&controller);
+    webAPI->begin();
 }
 
 void loop() {
     controller.update();
-    webUI->update();
+    webAPI->update();
 }
