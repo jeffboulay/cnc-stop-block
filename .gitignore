@@ -11,6 +11,7 @@ credentials.h
 # React UI
 ui/node_modules/
 ui/dist/
+*.tsbuildinfo
 
 # Simulator
 sim/node_modules/
