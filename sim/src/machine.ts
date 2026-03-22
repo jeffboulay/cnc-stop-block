@@ -222,7 +222,15 @@ export class SimMachine {
       cutlist_size: this.cutList.length,
       uptime_s: Math.floor((Date.now() - this.startTimeMs) / 1000),
     };
-    if (this.state === "ERROR" && this.error) status.error = this.error;
+    if (this.state === "ERROR" && this.error) {
+      status.error = this.error;
+      // Mirror the prefix-matching logic in firmware/src/WebAPI.cpp::buildStatusJSON()
+      if      (this.error.startsWith("Homing failed"))  status.error_code = "HOMING_FAILED";
+      else if (this.error.startsWith("Far limit"))      status.error_code = "FAR_LIMIT_TRIGGERED";
+      else if (this.error.startsWith("Move timeout"))   status.error_code = "MOVE_TIMEOUT";
+      else if (this.error.startsWith("Position error")) status.error_code = "POSITION_ERROR";
+      else                                               status.error_code = "UNKNOWN";
+    }
     return status;
   }
 

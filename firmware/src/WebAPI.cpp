@@ -612,7 +612,17 @@ String WebAPI::buildStatusJSON() {
     doc["cutlist_size"] = _controller->getCutList().size();
 
     if (_controller->getState() == SystemState::ERROR) {
-        doc["error"] = _controller->getErrorMessage();
+        const String& errMsg = _controller->getErrorMessage();
+        doc["error"] = errMsg;
+
+        // Stable code so the UI can show a friendly message without parsing
+        // the raw string.  Keep codes in sync with ui/src/api/errorMessages.ts.
+        const char* code = "UNKNOWN";
+        if      (errMsg.startsWith("Homing failed"))  code = "HOMING_FAILED";
+        else if (errMsg.startsWith("Far limit"))      code = "FAR_LIMIT_TRIGGERED";
+        else if (errMsg.startsWith("Move timeout"))   code = "MOVE_TIMEOUT";
+        else if (errMsg.startsWith("Position error")) code = "POSITION_ERROR";
+        doc["error_code"] = code;
     }
 
     doc["uptime_s"] = millis() / 1000;

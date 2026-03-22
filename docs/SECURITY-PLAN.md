@@ -18,8 +18,8 @@ This plan addresses the 7 open security findings in four phases, ordered by seve
 | 3 | HIGH | WiFi credentials hardcoded | Phase 2 | ✅ Complete |
 | 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 | ✅ Complete |
 | 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 | ✅ Complete |
-| 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 | Open |
-| 16 | LOW | Error messages shown directly | Phase 4 | Open |
+| 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 | ✅ Documented |
+| 16 | LOW | Error messages shown directly | Phase 4 | ✅ Complete |
 
 ---
 
@@ -219,12 +219,12 @@ Files:
 
 ---
 
-## Phase 4: Polish and Accepted-Risk Documentation
+## Phase 4: Polish and Accepted-Risk Documentation ✅ Complete
 
-Priority: Low
+Priority: Low — shipped in `feat/error-polish-phase4` (PR #10)
 Dependency: None. This can proceed in parallel with Phases 2 and 3.
 
-### Step 4.1: Error code mapping
+### Step 4.1: Error code mapping ✅
 
 - Add an `error_code` field to firmware status responses alongside the raw error string
 - Add `ui/src/api/errorMessages.ts` to map codes to user-facing messages
@@ -237,7 +237,7 @@ Files:
 - `ui/src/api/types.ts`
 - `ui/src/components/ErrorBanner.tsx`
 
-### Step 4.2: Document accepted risk for no TLS
+### Step 4.2: Document accepted risk for no TLS ✅
 
 - Update `docs/SECURITY.md` to explicitly document plaintext HTTP and WebSocket on the local network as an accepted risk
 - Note the ESP32 RAM cost of HTTPS/TLS under Arduino
@@ -248,9 +248,10 @@ Files:
 
 ### Verification
 
-- Error banners show user-friendly messages
-- Raw diagnostic details remain available when needed
-- TLS risk documentation is present and accurate
+- [x] Error banners show user-friendly title + detail text
+- [x] Raw diagnostic details available via collapsible "Details" toggle
+- [x] TLS accepted-risk documented in `docs/SECURITY.md` finding #6
+- [x] `pio run` and `npm run build` succeed
 
 ---
 
@@ -262,11 +263,9 @@ Files:
 - Keep `GET /api/status` auth-exempt by default for read-only monitoring, but make it configurable
 - Treat TLS as an accepted risk and mitigate operationally with network isolation
 
-## Completion Criteria
+## Completion Criteria ✅ All met
 
-The plan is complete when:
-
-1. All seven open findings in `docs/SECURITY.md` are resolved or explicitly documented as accepted risk
-2. Firmware builds cleanly with `pio run`
-3. UI continues to function end-to-end with the new auth flow
-4. The security review and remediation docs remain consistent with implementation state
+1. ✅ All 19 findings in `docs/SECURITY.md` are resolved or documented as accepted risk (finding #6 TLS)
+2. ✅ Firmware builds cleanly with `pio run`
+3. ✅ UI builds cleanly with `npm run build` and functions end-to-end
+4. ✅ Security review and remediation docs are consistent with implementation state
