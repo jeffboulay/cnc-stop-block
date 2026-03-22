@@ -26,6 +26,13 @@ void StepperMotion::moveToMM(float positionMM) {
     if (!_stepper || !_homed) return;
     if (positionMM < 0 || positionMM > MAX_TRAVEL_MM) return;
 
+    _targetMM = positionMM;
+    _inApproachZone = false;
+
+    // Restore full cruise speed before starting (may have been reduced by a
+    // previous approach zone or homing sequence).
+    _stepper->setSpeedInHz((uint32_t)(MAX_SPEED_MM_S * STEPS_PER_MM));
+    _stepper->setAcceleration((uint32_t)(ACCELERATION_MM_S2 * STEPS_PER_MM));
     _stepper->moveTo(mmToSteps(positionMM));
 }
 
@@ -40,6 +47,11 @@ void StepperMotion::jogMM(float distanceMM) {
     if (targetSteps < 0) targetSteps = 0;
     if (targetSteps > maxSteps) targetSteps = maxSteps;
 
+    _targetMM = stepsToMM(targetSteps);
+    _inApproachZone = false;
+
+    _stepper->setSpeedInHz((uint32_t)(MAX_SPEED_MM_S * STEPS_PER_MM));
+    _stepper->setAcceleration((uint32_t)(ACCELERATION_MM_S2 * STEPS_PER_MM));
     _stepper->moveTo(targetSteps);
 }
 
@@ -56,6 +68,26 @@ void StepperMotion::startHoming() {
 
     // Move a large negative distance (toward home)
     _stepper->move(mmToSteps(-MAX_TRAVEL_MM - 50));
+}
+
+void StepperMotion::update() {
+    if (!_stepper || !_stepper->isRunning() || _inApproachZone) return;
+
+    float currentMM = stepsToMM(_stepper->getCurrentPosition());
+    float remainingMM = fabsf(_targetMM - currentMM);
+
+    if (remainingMM <= APPROACH_ZONE_MM) {
+        _inApproachZone = true;
+
+        // Drop to approach speed. FastAccelStepper replans the remaining
+        // distance at the new speed using the existing acceleration value.
+        // APPROACH_ZONE_MM is sized so deceleration always completes in time.
+        _stepper->setSpeedInHz((uint32_t)(APPROACH_SPEED_MM_S * STEPS_PER_MM));
+        _stepper->applySpeedAcceleration();
+
+        Serial.printf("[STEPPER] Approach zone — %.1f mm remaining, slowing to %.0f mm/s\n",
+                      remainingMM, APPROACH_SPEED_MM_S);
+    }
 }
 
 StepperMotion::HomingPhase StepperMotion::updateHoming() {

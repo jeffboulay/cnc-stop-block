@@ -17,7 +17,14 @@ export function useStatus() {
 export function useIsConnected() {
   return useQuery<boolean>({
     queryKey: ['ws_connected'],
+    // queryFn never actually runs — the WS hook sets this via setQueryData.
+    // staleTime: Infinity prevents TanStack Query from refetching and
+    // overwriting the WS-managed value with false.
     queryFn: () => Promise.resolve(false),
     initialData: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }

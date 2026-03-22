@@ -7,12 +7,15 @@
 
 import type { SystemState, ToolInfo, CutEntry, SystemStatus } from './types.js'
 
-// Timing constants (ms) — mirror config.h
-const MAX_SPEED_MM_S = 50
-const HOMING_SPEED_MM_S = 10
-const SERVO_MOVE_MS = 300
-const DUST_ON_DELAY_MS = 1000
-const SETTLING_MS = 200
+// Timing constants — mirror config.h exactly. Update here when config.h changes.
+const MAX_SPEED_MM_S     = 200   // was 50
+const HOMING_SPEED_MM_S  = 15    // was 10
+const ACCELERATION_MM_S2 = 800
+const APPROACH_ZONE_MM   = 30
+const APPROACH_SPEED_MM_S = 15
+const SERVO_MOVE_MS      = 300
+const DUST_ON_DELAY_MS   = 1000
+const SETTLING_MS        = 350   // was 200
 
 export class SimMachine {
   // --- Public state (sent to UI) ---
@@ -36,7 +39,11 @@ export class SimMachine {
   private moveStartPos = 0
   private moveEndPos = 0
   private moveStartMs = 0
-  private moveDurationMs = 0
+  private moveDurationMs = 0        // total duration of phase 1 (cruise)
+  private approachStartMs = 0       // when phase 2 (approach) begins
+  private approachDurationMs = 0    // duration of phase 2
+  private approachStartPos = 0      // position at start of phase 2
+  private inApproachZone = false
   private pendingTargetMM = 0
 
   // -------------------------------------------------------------------------
@@ -269,25 +276,85 @@ export class SimMachine {
     this.stateEnteredAt = Date.now()
   }
 
-  private _startMove(fromMM: number, toMM: number, speedMMS: number) {
+  /**
+   * Start a two-phase move that mirrors the firmware approach zone behaviour:
+   *
+   * Phase 1 — Cruise: move from fromMM to (toMM - APPROACH_ZONE_MM) at
+   *           the given cruiseSpeed using a trapezoidal profile.
+   *           For short moves (< APPROACH_ZONE_MM) this phase has zero length.
+   *
+   * Phase 2 — Approach: cover the final APPROACH_ZONE_MM at APPROACH_SPEED_MM_S
+   *           for accurate final positioning.
+   */
+  private _startMove(fromMM: number, toMM: number, cruiseSpeed: number) {
+    const totalDist = Math.abs(toMM - fromMM)
+    const dir = toMM >= fromMM ? 1 : -1
+
     this.moveStartPos = fromMM
     this.moveEndPos = toMM
     this.moveStartMs = Date.now()
-    const distanceMM = Math.abs(toMM - fromMM)
-    // Trapezoidal motion approximation: add 20% for accel/decel ramp
-    this.moveDurationMs = distanceMM === 0 ? 50 : Math.round((distanceMM / speedMMS) * 1000 * 1.2)
+    this.inApproachZone = false
+
+    const approachDist = Math.min(APPROACH_ZONE_MM, totalDist)
+    const cruiseDist   = totalDist - approachDist
+    const approachEndPos = toMM
+    const approachStartPosMM = toMM - dir * approachDist
+
+    // Phase 1: trapezoidal cruise duration
+    if (cruiseDist > 0) {
+      const vMax = Math.min(cruiseSpeed, Math.sqrt(cruiseDist * ACCELERATION_MM_S2))
+      const tRamp = vMax / ACCELERATION_MM_S2
+      const dRamp = 0.5 * ACCELERATION_MM_S2 * tRamp * tRamp
+      const dCruise = cruiseDist - 2 * dRamp
+      const tCruise = dCruise > 0 ? dCruise / vMax : 0
+      this.moveDurationMs = Math.round((2 * tRamp + tCruise) * 1000)
+    } else {
+      this.moveDurationMs = 0
+    }
+
+    // Phase 2: approach duration (triangle profile at low speed)
+    const vApproach = Math.min(APPROACH_SPEED_MM_S, Math.sqrt(approachDist * ACCELERATION_MM_S2))
+    const tApproachRamp = vApproach / ACCELERATION_MM_S2
+    const dApproachRamp = 0.5 * ACCELERATION_MM_S2 * tApproachRamp * tApproachRamp
+    const dApproachCruise = approachDist - 2 * dApproachRamp
+    const tApproachCruise = dApproachCruise > 0 ? dApproachCruise / vApproach : 0
+    this.approachDurationMs = Math.round((2 * tApproachRamp + tApproachCruise) * 1000)
+    this.approachStartPos = approachStartPosMM
+
+    console.log(
+      `[SIM] Move ${fromMM.toFixed(1)}→${toMM.toFixed(1)}mm | ` +
+      `cruise ${(this.moveDurationMs/1000).toFixed(2)}s | ` +
+      `approach ${(this.approachDurationMs/1000).toFixed(2)}s`
+    )
   }
 
   private _interpolateMove(): number {
-    const elapsed = Date.now() - this.moveStartMs
-    const t = Math.min(elapsed / this.moveDurationMs, 1)
-    // Smoothstep easing (mimics trapezoidal ramp)
+    const now = Date.now()
+    const cruiseElapsed = now - this.moveStartMs
+
+    // Still in cruise phase
+    if (!this.inApproachZone) {
+      if (this.moveDurationMs > 0 && cruiseElapsed < this.moveDurationMs) {
+        const t = cruiseElapsed / this.moveDurationMs
+        const ease = t * t * (3 - 2 * t)  // smoothstep ≈ trapezoid
+        return this.moveStartPos + (this.approachStartPos - this.moveStartPos) * ease
+      }
+      // Transition to approach zone
+      this.inApproachZone = true
+      this.approachStartMs = now
+      console.log('[SIM] → approach zone')
+    }
+
+    // Approach phase
+    const approachElapsed = now - this.approachStartMs
+    const t = Math.min(approachElapsed / this.approachDurationMs, 1)
     const ease = t * t * (3 - 2 * t)
-    return this.moveStartPos + (this.moveEndPos - this.moveStartPos) * ease
+    return this.approachStartPos + (this.moveEndPos - this.approachStartPos) * ease
   }
 
   private _isMoveComplete(): boolean {
-    return Date.now() - this.moveStartMs >= this.moveDurationMs
+    if (!this.inApproachZone) return false
+    return Date.now() - this.approachStartMs >= this.approachDurationMs
   }
 
   private _nextCutIndex(): number {

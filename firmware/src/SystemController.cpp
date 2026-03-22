@@ -361,6 +361,9 @@ void SystemController::handleUnlocking() {
 }
 
 void SystemController::handleMoving() {
+    // Tick approach zone — drops to APPROACH_SPEED_MM_S within APPROACH_ZONE_MM
+    _stepper->update();
+
     if (!_stepper->isMoving()) {
         transitionTo(SystemState::SETTLING);
     }

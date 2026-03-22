@@ -30,6 +30,9 @@ public:
     bool isHomeSwitchActive() const;
     bool isFarSwitchActive() const;
 
+    // Call from loop() every iteration — handles approach zone speed reduction
+    void update();
+
     // Call from loop() to manage homing sequence
     enum class HomingPhase { IDLE, SEEKING, BACKING_OFF, COMPLETE, FAILED };
     HomingPhase updateHoming();
@@ -44,6 +47,10 @@ private:
     bool _homed = false;
     HomingPhase _homingPhase = HomingPhase::IDLE;
     unsigned long _homingStartMs = 0;
+
+    // Approach zone
+    float _targetMM = 0;
+    bool  _inApproachZone = false;
 
     long  mmToSteps(float mm) const;
     float stepsToMM(long steps) const;
