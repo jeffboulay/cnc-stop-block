@@ -218,6 +218,7 @@ bool  SystemController::areClampsEngaged() const { return _clamps->isEngaged(); 
 ToolInfo SystemController::getActiveTool() const { return _rfid->getCurrentTool(); }
 bool  SystemController::isToolPresent() const { return _rfid->isToolPresent(); }
 CutList& SystemController::getCutList() { return *_cutList; }
+RFIDReader& SystemController::getRFIDReader() { return *_rfid; }
 String SystemController::getErrorMessage() const { return _errorMessage; }
 
 // --- State Machine ---

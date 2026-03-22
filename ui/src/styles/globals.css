@@ -1,0 +1,69 @@
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #0f3460;
+  --text-primary: #e0e0e0;
+  --text-bright: #ffffff;
+  --text-dim: #888;
+  --accent: #e94560;
+  --green: #00e676;
+  --red: #ff1744;
+  --yellow: #ffd600;
+  --blue: #448aff;
+  --orange: #ff9100;
+  --dro-color: #00e676;
+  --target-color: #448aff;
+  --btn-radius: 12px;
+  --touch-min: 48px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+input, button {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  transition: all 0.1s;
+}
+
+button:active {
+  transform: scale(0.95);
+  filter: brightness(0.8);
+}
+
+input {
+  outline: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+/* Animations */
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}

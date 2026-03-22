@@ -41,7 +41,7 @@ public:
     void begin();
     void update(); // Call from loop()
 
-    // Commands (from WebUI or ButtonPanel)
+    // Commands (from WebAPI or ButtonPanel)
     void commandHome();
     void commandGoTo(float positionMM);
     void commandLock();
@@ -53,7 +53,7 @@ public:
     void commandJog(float distanceMM);
     void commandNextCut();
 
-    // Status getters (for WebUI)
+    // Status getters (for WebAPI)
     SystemState getState() const;
     float getCurrentPositionMM() const;
     float getTargetPositionMM() const;
@@ -64,6 +64,7 @@ public:
     ToolInfo getActiveTool() const;
     bool  isToolPresent() const;
     CutList& getCutList();
+    RFIDReader& getRFIDReader();
 
     // Error info
     String getErrorMessage() const;

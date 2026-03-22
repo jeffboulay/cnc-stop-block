@@ -1,5 +1,5 @@
+# Firmware
 .pio/
-.vscode/
 *.o
 *.obj
 *.elf
@@ -7,3 +7,11 @@
 *.hex
 *.map
 credentials.h
+
+# React UI
+ui/node_modules/
+ui/dist/
+
+# IDE / Tools
+.vscode/
+.claude/
