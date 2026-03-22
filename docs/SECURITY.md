@@ -2,6 +2,8 @@
 
 Reviewed: March 22, 2026
 
+Implementation plan: [SECURITY-PLAN.md](SECURITY-PLAN.md)
+
 ## Threat Model
 
 This is a WiFi-connected ESP32 device on a local network controlling a miter saw stop block with stepper motor, pneumatic clamps, and dust collection. The UI is a React PWA accessed from an iPad Pro.
