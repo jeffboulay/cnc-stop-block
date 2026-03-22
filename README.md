@@ -133,6 +133,28 @@ npm run build
 
 Open the dev server URL on your iPad Pro. Tap **Share > Add to Home Screen** for a full-screen kiosk experience.
 
+### First-boot pairing
+
+The ESP32 generates a random 64-character API token on first boot, stores it in flash, and prints it to the serial monitor:
+
+```
+[AUTH] *** NEW API TOKEN GENERATED ***
+[AUTH] Enter this token in the UI pairing screen:
+[AUTH] a3f8c1d2e4b59f7a...  (64 hex chars)
+```
+
+Open the UI in a browser — a **Pair with CNC Stop Block** screen appears. Paste the token and tap **Pair Device**. The token is saved in the browser's `localStorage` and used automatically on every subsequent request.
+
+The token persists across reboots (stored in LittleFS). To rotate it:
+
+```bash
+curl -X POST http://<esp32-ip>/api/token/rotate \
+  -H "Authorization: Bearer <current-token>"
+# → {"token":"<new-token>"}
+```
+
+After rotation, the UI detects the 401 response on its next request, clears the stored token, and returns to the pairing screen automatically.
+
 ## Development Without Hardware
 
 A mock ESP32 server in `sim/` lets you build and test the React UI before the physical machine exists. It runs the full state machine with realistic timing — no ESP32 required.
@@ -142,16 +164,34 @@ A mock ESP32 server in `sim/` lets you build and test the React UI before the ph
 cd sim
 npm install
 npm run dev
+```
 
+The sim prints a token on startup:
+
+```
+  *** SIM API TOKEN ***
+  a3f8c1d2e4b59f7a...
+  Enter this in the UI pairing screen (or set SIM_TOKEN env to fix it).
+```
+
+```bash
 # Terminal 2 — start the UI, pointed at the sim
 cd ui
 VITE_PROXY_TARGET=http://localhost:3001 npm run dev
 ```
 
-Then seed the sim with sample data:
+Open `http://localhost:5173`, paste the token into the pairing screen, and tap **Pair Device**.
+
+Then seed the sim with sample data (no auth needed for `/sim/*` endpoints):
 
 ```bash
 curl -X POST http://localhost:3001/sim/seed
+```
+
+To avoid re-pairing every time the sim restarts, pin the token with an env var:
+
+```bash
+SIM_TOKEN=deadbeef0123456789abcdef0123456789abcdef0123456789abcdef01234567 npm run dev
 ```
 
 ### Simulation controls
@@ -235,46 +275,57 @@ if (doc["position_mm"].is<float>()) {
 
 ## API
 
-The ESP32 exposes a REST API with CORS support. All endpoints return JSON.
+The ESP32 exposes a REST API. All endpoints return JSON.
+
+### Authentication
+
+All endpoints except `GET /api/status` require a bearer token:
+
+```
+Authorization: Bearer <token>
+```
+
+The token is generated on first boot and printed to the serial monitor. Rotate it with `POST /api/token/rotate`. The UI stores the token in `localStorage` and sends it automatically after the one-time pairing step.
 
 ### Status & Commands
 
-| Method | Endpoint      | Body                     | Description            |
-| ------ | ------------- | ------------------------ | ---------------------- |
-| `GET`  | `/api/status` | —                        | System status snapshot |
-| `POST` | `/api/home`   | —                        | Start homing sequence  |
-| `POST` | `/api/goto`   | `{"position_mm": 150.5}` | Move to position       |
-| `POST` | `/api/jog`    | `{"distance_mm": 1.0}`   | Relative jog           |
-| `POST` | `/api/lock`   | —                        | Engage latch           |
-| `POST` | `/api/unlock` | —                        | Release latch          |
-| `POST` | `/api/estop`  | —                        | Emergency stop         |
-| `POST` | `/api/reset`  | —                        | Clear error state      |
+| Method | Endpoint               | Auth | Body                     | Description            |
+| ------ | ---------------------- | ---- | ------------------------ | ---------------------- |
+| `GET`  | `/api/status`          | —    | —                        | System status snapshot |
+| `POST` | `/api/home`            | ✓    | —                        | Start homing sequence  |
+| `POST` | `/api/goto`            | ✓    | `{"position_mm": 150.5}` | Move to position       |
+| `POST` | `/api/jog`             | ✓    | `{"distance_mm": 1.0}`   | Relative jog           |
+| `POST` | `/api/lock`            | ✓    | —                        | Engage latch           |
+| `POST` | `/api/unlock`          | ✓    | —                        | Release latch          |
+| `POST` | `/api/estop`           | ✓    | —                        | Emergency stop         |
+| `POST` | `/api/reset`           | ✓    | —                        | Clear error state      |
+| `POST` | `/api/token/rotate`    | ✓    | —                        | Rotate API token       |
 
 ### Cut List
 
-| Method   | Endpoint              | Body                             | Description               |
-| -------- | --------------------- | -------------------------------- | ------------------------- |
-| `GET`    | `/api/cutlist`        | —                                | Get all cuts              |
-| `POST`   | `/api/cutlist`        | `[{label, length_mm, quantity}]` | Replace list              |
-| `POST`   | `/api/cutlist/add`    | `{label, length_mm, quantity}`   | Add cut                   |
-| `DELETE` | `/api/cutlist/:index` | —                                | Remove cut                |
-| `POST`   | `/api/cutlist/clear`  | —                                | Clear all                 |
-| `POST`   | `/api/cutlist/reset`  | —                                | Reset completed status    |
-| `POST`   | `/api/cut/start`      | —                                | Start cut (dust + clamps) |
-| `POST`   | `/api/cut/end`        | —                                | End cut                   |
-| `POST`   | `/api/cut/next`       | —                                | Move to next cut          |
+| Method   | Endpoint              | Auth | Body                             | Description               |
+| -------- | --------------------- | ---- | -------------------------------- | ------------------------- |
+| `GET`    | `/api/cutlist`        | ✓    | —                                | Get all cuts              |
+| `POST`   | `/api/cutlist`        | ✓    | `[{label, length_mm, quantity}]` | Replace list              |
+| `POST`   | `/api/cutlist/add`    | ✓    | `{label, length_mm, quantity}`   | Add cut                   |
+| `DELETE` | `/api/cutlist/:index` | ✓    | —                                | Remove cut                |
+| `POST`   | `/api/cutlist/clear`  | ✓    | —                                | Clear all                 |
+| `POST`   | `/api/cutlist/reset`  | ✓    | —                                | Reset completed status    |
+| `POST`   | `/api/cut/start`      | ✓    | —                                | Start cut (dust + clamps) |
+| `POST`   | `/api/cut/end`        | ✓    | —                                | End cut                   |
+| `POST`   | `/api/cut/next`       | ✓    | —                                | Move to next cut          |
 
 ### Tools
 
-| Method   | Endpoint          | Body                   | Description           |
-| -------- | ----------------- | ---------------------- | --------------------- |
-| `GET`    | `/api/tools`      | —                      | List registered tools |
-| `POST`   | `/api/tools`      | `{uid, name, kerf_mm}` | Register tool         |
-| `DELETE` | `/api/tools/:uid` | —                      | Remove tool           |
+| Method   | Endpoint          | Auth | Body                   | Description           |
+| -------- | ----------------- | ---- | ---------------------- | --------------------- |
+| `GET`    | `/api/tools`      | ✓    | —                      | List registered tools |
+| `POST`   | `/api/tools`      | ✓    | `{uid, name, kerf_mm}` | Register tool         |
+| `DELETE` | `/api/tools/:uid` | ✓    | —                      | Remove tool           |
 
 ### WebSocket
 
-`ws://<esp32-ip>/ws` — pushes JSON status at 10 Hz.
+`ws://<esp32-ip>/ws?token=<token>` — pushes JSON status at 10 Hz. The token is required; connections without a valid token are rejected immediately.
 
 ## State Machine
 

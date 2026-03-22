@@ -11,25 +11,25 @@ This plan addresses the 7 open security findings in four phases, ordered by seve
 
 ## Open Findings
 
-| # | Severity | Finding | Phase |
-|---|----------|---------|-------|
-| 1 | CRITICAL | No API authentication | Phase 1 |
-| 2 | CRITICAL | CORS wildcard default | Phase 1 |
-| 3 | HIGH | WiFi credentials hardcoded | Phase 2 |
-| 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 |
-| 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 |
-| 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 |
-| 16 | LOW | Error messages shown directly | Phase 4 |
+| # | Severity | Finding | Phase | Status |
+|---|----------|---------|-------|--------|
+| 1 | CRITICAL | No API authentication | Phase 1 | ✅ Complete |
+| 2 | CRITICAL | CORS wildcard default | Phase 1 | ✅ Complete |
+| 3 | HIGH | WiFi credentials hardcoded | Phase 2 | Open |
+| 5 | HIGH | No per-IP rate limiting (partial) | Phase 3 | Open |
+| 7 | HIGH | No HTTP endpoint rate limiting | Phase 3 | Open |
+| 6 | HIGH | Unencrypted transport (accepted risk) | Phase 4 | Open |
+| 16 | LOW | Error messages shown directly | Phase 4 | Open |
 
 ---
 
-## Phase 1: API Authentication and CORS Lockdown
+## Phase 1: API Authentication and CORS Lockdown ✅ Complete
 
-Priority: Critical
+Priority: Critical — shipped in `feat/api-auth-phase1` (PR #7)
 
 This phase has no blockers and should ship first. It removes unauthenticated machine control and the unsafe default cross-origin policy.
 
-### Step 1.1: Token generation and storage
+### Step 1.1: Token generation and storage ✅
 
 - Add `#include <LittleFS.h>` to `firmware/src/WebAPI.cpp`
 - Add private method `WebAPI::loadOrCreateToken()` and call it from `begin()`
@@ -42,7 +42,7 @@ Files:
 - `firmware/src/WebAPI.cpp`
 - `firmware/include/config.h`
 
-### Step 1.2: HTTP authentication middleware
+### Step 1.2: HTTP authentication middleware ✅
 
 - Add private method `bool WebAPI::isAuthenticated(AsyncWebServerRequest* request)`
 - Require `Authorization: Bearer <token>` on API requests
@@ -55,7 +55,7 @@ Files:
 - `firmware/src/WebAPI.cpp`
 - `firmware/include/config.h`
 
-### Step 1.3: WebSocket authentication
+### Step 1.3: WebSocket authentication ✅
 
 - In the `WS_EVT_CONNECT` branch of `onWebSocketEvent()`, parse `token=` from the handshake URL
 - Compare it to `_authToken`
@@ -64,7 +64,7 @@ Files:
 Files:
 - `firmware/src/WebAPI.cpp`
 
-### Step 1.4: CORS default lockdown
+### Step 1.4: CORS default lockdown ✅
 
 - Change the fallback branch in `addCORSHeaders()` so it does not send `Access-Control-Allow-Origin` by default
 - Keep cross-origin access opt-in via `-DCORS_ORIGIN=\"...\"` in `firmware/platformio.ini`
@@ -72,7 +72,7 @@ Files:
 Files:
 - `firmware/src/WebAPI.cpp`
 
-### Step 1.5: UI token storage and request wiring
+### Step 1.5: UI token storage and request wiring ✅
 
 - Add `ui/src/api/auth.ts` with `getToken()` and `setToken()` helpers using `localStorage`
 - Add the bearer token to all HTTP requests in `ui/src/api/client.ts`
@@ -84,7 +84,7 @@ Files:
 - `ui/src/api/client.ts`
 - `ui/src/api/websocket.ts`
 
-### Step 1.6: UI pairing screen
+### Step 1.6: UI pairing screen ✅
 
 - Add `ui/src/components/TokenSetup.tsx`
 - Show it from `ui/src/App.tsx` when no token is present
@@ -94,7 +94,7 @@ Files:
 - `ui/src/components/TokenSetup.tsx`
 - `ui/src/App.tsx`
 
-### Step 1.7: Token rotation
+### Step 1.7: Token rotation ✅
 
 - Add authenticated endpoint `POST /api/token/rotate`
 - Generate and persist a new token
@@ -105,12 +105,12 @@ Files:
 
 ### Verification
 
-- `pio run` succeeds
-- Unauthenticated API requests return 401
-- Authenticated API requests succeed
-- WebSocket rejects missing or invalid tokens
-- Cross-origin requests fail unless `CORS_ORIGIN` is explicitly configured
-- UI shows a pairing screen until a valid token is entered
+- [x] `pio run` succeeds
+- [x] Unauthenticated API requests return 401
+- [x] Authenticated API requests succeed
+- [x] WebSocket rejects missing or invalid tokens
+- [x] Cross-origin requests fail unless `CORS_ORIGIN` is explicitly configured
+- [x] UI shows a pairing screen until a valid token is entered
 
 ---
 
