@@ -1,0 +1,64 @@
+#pragma once
+
+// =============================================================================
+// Configuration — CNC Stop Block
+// =============================================================================
+// All tuneable parameters in one place. No magic numbers elsewhere.
+// Ender 3 defaults: NEMA 17 (200 steps/rev), GT2 belt, 20-tooth pulley.
+// =============================================================================
+
+// --- Motion: Stepper + GT2 Belt ---
+constexpr int    STEPS_PER_REV        = 200;
+constexpr int    MICROSTEPS           = 16;
+constexpr int    GT2_PULLEY_TEETH     = 20;
+constexpr float  GT2_PITCH_MM         = 2.0f;
+
+// Calculated: (200 * 16) / (20 * 2.0) = 80 steps/mm
+constexpr float  STEPS_PER_MM         = (float)(STEPS_PER_REV * MICROSTEPS)
+                                        / (GT2_PULLEY_TEETH * GT2_PITCH_MM);
+
+constexpr float  MAX_SPEED_MM_S       = 50.0f;     // 4000 steps/s
+constexpr float  HOMING_SPEED_MM_S    = 10.0f;     // 800 steps/s
+constexpr float  ACCELERATION_MM_S2   = 200.0f;    // 16000 steps/s^2
+constexpr float  POSITION_TOLERANCE_MM = 0.05f;
+
+// --- Travel Limits ---
+constexpr float  MAX_TRAVEL_MM        = 1200.0f;   // Max fence length
+constexpr float  HOME_BACKOFF_MM      = 2.0f;      // Back off after hitting home switch
+
+// --- Servo Latch ---
+constexpr int    SERVO_LOCKED_ANGLE   = 0;
+constexpr int    SERVO_UNLOCKED_ANGLE = 90;
+constexpr unsigned long SERVO_MOVE_TIME_MS = 300;
+
+// --- RFID ---
+constexpr unsigned long RFID_POLL_INTERVAL_MS = 500;
+
+// --- Dust Collection ---
+constexpr unsigned long DUST_ON_DELAY_MS  = 1000;  // Spin-up before cut
+constexpr unsigned long DUST_OFF_DELAY_MS = 3000;  // Run-down after cut
+
+// --- Button Debounce ---
+constexpr unsigned long DEBOUNCE_MS = 50;
+
+// --- Wi-Fi ---
+#ifndef WIFI_SSID
+#define WIFI_SSID     "SmartWorkshop"
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD ""  // Override in credentials.h or build flags
+#endif
+constexpr bool   WIFI_AP_FALLBACK     = true;
+#define AP_SSID   "CNC-StopBlock"
+#define AP_PASS   "stopblock"
+
+// --- WebSocket ---
+constexpr unsigned long WS_UPDATE_INTERVAL_MS = 100; // 10 Hz status broadcast
+
+// --- NeoPixel ---
+constexpr uint8_t LED_BRIGHTNESS = 128;
+
+// --- Safety Timeouts ---
+constexpr unsigned long HOMING_TIMEOUT_MS = (unsigned long)((MAX_TRAVEL_MM / HOMING_SPEED_MM_S) * 1500); // 1.5x expected time
+constexpr unsigned long MOVE_TIMEOUT_MS   = (unsigned long)((MAX_TRAVEL_MM / MAX_SPEED_MM_S) * 1500);
+constexpr unsigned long SETTLING_TIMEOUT_MS = 2000;

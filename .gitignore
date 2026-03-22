@@ -1,0 +1,9 @@
+.pio/
+.vscode/
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+credentials.h

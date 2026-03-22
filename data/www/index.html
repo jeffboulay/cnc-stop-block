@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <title>CNC Stop Block</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Top Bar -->
+        <header id="topbar">
+            <div id="state-badge" class="badge">BOOT</div>
+            <div id="tool-info">No tool detected</div>
+            <div id="wifi-status">--</div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Left: DRO Display + Controls -->
+            <section id="dro-section">
+                <div id="dro-display">
+                    <div id="dro-label">POSITION</div>
+                    <div id="dro-value">0.00</div>
+                    <div id="dro-unit">mm</div>
+                </div>
+                <div id="target-display">
+                    <span class="target-label">TARGET</span>
+                    <span id="target-value">0.00</span>
+                    <span class="target-unit">mm</span>
+                </div>
+                <div id="error-display">
+                    <span class="error-label">ERROR</span>
+                    <span id="error-value">0.00</span>
+                    <span class="error-unit">mm</span>
+                </div>
+
+                <!-- Jog Controls -->
+                <div id="jog-controls">
+                    <div id="jog-step-select">
+                        <button class="jog-step active" data-step="0.1">0.1</button>
+                        <button class="jog-step" data-step="1">1.0</button>
+                        <button class="jog-step" data-step="10">10</button>
+                        <button class="jog-step" data-step="100">100</button>
+                    </div>
+                    <div id="jog-buttons">
+                        <button id="jog-minus" class="jog-btn">&#9664; JOG</button>
+                        <button id="jog-plus" class="jog-btn">JOG &#9654;</button>
+                    </div>
+                </div>
+
+                <!-- Position Input -->
+                <div id="goto-controls">
+                    <input type="number" id="goto-input" placeholder="Enter position (mm)" step="0.1" min="0" max="1200">
+                    <button id="goto-btn" class="action-btn">GO TO</button>
+                </div>
+            </section>
+
+            <!-- Right: Action Buttons + Cut List -->
+            <section id="action-section">
+                <!-- Control Buttons -->
+                <div id="control-buttons">
+                    <button id="btn-home" class="ctrl-btn home-btn">HOME</button>
+                    <button id="btn-lock" class="ctrl-btn lock-btn">LOCK</button>
+                    <button id="btn-next" class="ctrl-btn next-btn">NEXT CUT</button>
+                    <button id="btn-cut" class="ctrl-btn cut-btn">START CUT</button>
+                    <button id="btn-estop" class="ctrl-btn estop-btn">E-STOP</button>
+                    <button id="btn-reset" class="ctrl-btn reset-btn" style="display:none">RESET</button>
+                </div>
+
+                <!-- Status Indicators -->
+                <div id="indicators">
+                    <div class="indicator" id="ind-homed"><span class="dot"></span>Homed</div>
+                    <div class="indicator" id="ind-locked"><span class="dot"></span>Locked</div>
+                    <div class="indicator" id="ind-dust"><span class="dot"></span>Dust</div>
+                    <div class="indicator" id="ind-clamps"><span class="dot"></span>Clamps</div>
+                </div>
+
+                <!-- Cut List -->
+                <div id="cutlist-panel">
+                    <div id="cutlist-header">
+                        <h3>Cut List</h3>
+                        <div id="cutlist-actions">
+                            <button id="cutlist-add" class="small-btn">+ Add</button>
+                            <button id="cutlist-clear" class="small-btn">Clear</button>
+                            <button id="cutlist-reset" class="small-btn">Reset</button>
+                        </div>
+                    </div>
+                    <div id="cutlist-items"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Error Banner -->
+        <div id="error-banner" style="display:none">
+            <span id="error-message"></span>
+            <button id="error-dismiss">RESET</button>
+        </div>
+
+        <!-- Add Cut Modal -->
+        <div id="add-cut-modal" class="modal" style="display:none">
+            <div class="modal-content">
+                <h3>Add Cut</h3>
+                <label>Label<input type="text" id="cut-label" placeholder="e.g. Shelf Side A"></label>
+                <label>Length (mm)<input type="number" id="cut-length" step="0.1" min="0" max="1200"></label>
+                <label>Quantity<input type="number" id="cut-qty" value="1" min="1" max="100"></label>
+                <div class="modal-actions">
+                    <button id="cut-cancel" class="small-btn">Cancel</button>
+                    <button id="cut-save" class="action-btn">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

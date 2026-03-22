@@ -1,0 +1,11 @@
+{
+    "name": "CNC Stop Block",
+    "short_name": "StopBlock",
+    "description": "Miter Saw CNC Stop Block Controller",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "landscape",
+    "background_color": "#1a1a2e",
+    "theme_color": "#e94560",
+    "icons": []
+}
