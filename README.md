@@ -15,6 +15,7 @@ Built using parts salvaged from an **Ender 3 3D printer** (NEMA 17 stepper, GT2 
 ```
 
 **Two-project monorepo:**
+
 - `firmware/` — ESP32 PlatformIO project: headless REST API + WebSocket status server
 - `ui/` — React + Vite + TypeScript + TanStack Query: touch-optimized iPad Pro PWA
 
@@ -37,42 +38,42 @@ The ESP32 serves no static files — it only exposes a JSON API. The React UI ru
 
 ### From Ender 3
 
-| Part | Use |
-|---|---|
-| NEMA 17 stepper (X or Y axis) | Belt-drive motor |
-| GT2 belt + 20-tooth pulleys | Linear motion drive |
-| 2040 V-slot extrusion | Fence rail / track |
-| V-slot wheels + eccentric nuts | Stop block carriage |
-| Mechanical endstops (x2) | Home + far-end limit switches |
-| 24V PSU | Main power supply |
-| TMC2208/2209 driver | Stepper driver |
+| Part                           | Use                           |
+| ------------------------------ | ----------------------------- |
+| NEMA 17 stepper (X or Y axis)  | Belt-drive motor              |
+| GT2 belt + 20-tooth pulleys    | Linear motion drive           |
+| 2040 V-slot extrusion          | Fence rail / track            |
+| V-slot wheels + eccentric nuts | Stop block carriage           |
+| Mechanical endstops (x2)       | Home + far-end limit switches |
+| 24V PSU                        | Main power supply             |
+| TMC2208/2209 driver            | Stepper driver                |
 
 ### Additional Parts
 
-| Part | Purpose |
-|---|---|
-| ESP32 DevKit V1 | Microcontroller (WiFi + GPIO) |
-| 5V buck converter | Power for ESP32 and servo from 24V rail |
-| SG90 servo | Magnet latch actuation |
-| MFRC522 RFID module | Tool/blade detection |
-| NeoPixel strip (8 LEDs) | Status indicators |
-| Relay module | Dust collection switching |
-| Solenoid valve | Pneumatic clamp control |
-| Momentary buttons (x4) | Home, Go, Lock, E-Stop |
+| Part                    | Purpose                                 |
+| ----------------------- | --------------------------------------- |
+| ESP32 DevKit V1         | Microcontroller (WiFi + GPIO)           |
+| 5V buck converter       | Power for ESP32 and servo from 24V rail |
+| SG90 servo              | Magnet latch actuation                  |
+| MFRC522 RFID module     | Tool/blade detection                    |
+| NeoPixel strip (8 LEDs) | Status indicators                       |
+| Relay module            | Dust collection switching               |
+| Solenoid valve          | Pneumatic clamp control                 |
+| Momentary buttons (x4)  | Home, Go, Lock, E-Stop                  |
 
 ### Wiring
 
 All GPIO assignments are in [`firmware/include/pins.h`](firmware/include/pins.h). Key connections:
 
-| Function | GPIO |
-|---|---|
-| Stepper STEP / DIR / EN | 25 / 26 / 27 |
-| Limit switches (home / far) | 34 / 35 |
-| Servo latch | 13 |
-| RFID SS / RST | 5 / 22 |
-| NeoPixel data | 4 |
-| Dust relay | 32 |
-| Clamp solenoid | 33 |
+| Function                            | GPIO             |
+| ----------------------------------- | ---------------- |
+| Stepper STEP / DIR / EN             | 25 / 26 / 27     |
+| Limit switches (home / far)         | 34 / 35          |
+| Servo latch                         | 13               |
+| RFID SS / RST                       | 5 / 22           |
+| NeoPixel data                       | 4                |
+| Dust relay                          | 32               |
+| Clamp solenoid                      | 33               |
 | Buttons (Go / Home / Lock / E-Stop) | 14 / 12 / 15 / 2 |
 
 Tuning parameters (steps/mm, speeds, delays) are in [`firmware/include/config.h`](firmware/include/config.h).
@@ -83,7 +84,12 @@ Tuning parameters (steps/mm, speeds, delays) are in [`firmware/include/config.h`
 
 Requires [PlatformIO](https://platformio.org/).
 
+On macOS, prefer installing Python via Homebrew and letting PlatformIO use that interpreter instead of the system/Xcode Python. This avoids the `urllib3` `NotOpenSSLWarning` caused by LibreSSL-backed Python builds.
+
 ```bash
+# Recommended on macOS
+brew install python3
+
 cd firmware
 
 # Build
@@ -95,6 +101,12 @@ pio run -t upload
 # Monitor serial output
 pio device monitor
 ```
+
+Notes:
+
+- Run PlatformIO from the `firmware/` directory, where `platformio.ini` lives.
+- The firmware currently uses `esp32async/ESPAsyncWebServer` with `esp32async/AsyncTCP`.
+- `firmware/platformio.ini` enables `ASYNCWEBSERVER_REGEX`, which is required for the route handlers that use `request->pathArg(...)`.
 
 ### Web UI
 
@@ -116,44 +128,107 @@ npm run build
 
 Open the dev server URL on your iPad Pro. Tap **Share > Add to Home Screen** for a full-screen kiosk experience.
 
+## Troubleshooting
+
+### PlatformIO says this is not a project
+
+If `pio run` reports that `platformio.ini` was not found, you are probably in the repo root instead of the firmware project directory.
+
+```bash
+cd firmware
+pio run
+```
+
+### macOS shows `NotOpenSSLWarning`
+
+This means PlatformIO is running under Apple/Xcode Python linked against LibreSSL instead of a Homebrew Python linked against OpenSSL.
+
+Install Homebrew Python:
+
+```bash
+brew install python3
+```
+
+If PlatformIO was previously installed against Apple/Xcode Python, rebuild its private virtual environment:
+
+```bash
+rm -rf ~/.platformio/penv
+/opt/homebrew/bin/python3 -m venv ~/.platformio/penv
+~/.platformio/penv/bin/python -m pip install -U pip setuptools wheel platformio
+```
+
+Verify the new runtime:
+
+```bash
+~/.platformio/penv/bin/python -c "import ssl; print(ssl.OPENSSL_VERSION)"
+~/.platformio/penv/bin/pio system info
+```
+
+### Async web server route errors with `pathArg()`
+
+Newer `ESPAsyncWebServer` releases require regex route support for handlers that call `request->pathArg(...)`.
+
+This project already enables the required flag in `firmware/platformio.ini`:
+
+```ini
+build_flags =
+    -DASYNCWEBSERVER_REGEX
+```
+
+### ArduinoJson `containsKey()` deprecation warnings
+
+ArduinoJson v7 deprecates `containsKey()` in favor of checking the keyed variant directly.
+
+Use one of these patterns instead:
+
+```cpp
+if (doc["position_mm"].isNull()) {
+    // missing key
+}
+
+if (doc["position_mm"].is<float>()) {
+    // typed validation
+}
+```
+
 ## API
 
 The ESP32 exposes a REST API with CORS support. All endpoints return JSON.
 
 ### Status & Commands
 
-| Method | Endpoint | Body | Description |
-|---|---|---|---|
-| `GET` | `/api/status` | — | System status snapshot |
-| `POST` | `/api/home` | — | Start homing sequence |
-| `POST` | `/api/goto` | `{"position_mm": 150.5}` | Move to position |
-| `POST` | `/api/jog` | `{"distance_mm": 1.0}` | Relative jog |
-| `POST` | `/api/lock` | — | Engage latch |
-| `POST` | `/api/unlock` | — | Release latch |
-| `POST` | `/api/estop` | — | Emergency stop |
-| `POST` | `/api/reset` | — | Clear error state |
+| Method | Endpoint      | Body                     | Description            |
+| ------ | ------------- | ------------------------ | ---------------------- |
+| `GET`  | `/api/status` | —                        | System status snapshot |
+| `POST` | `/api/home`   | —                        | Start homing sequence  |
+| `POST` | `/api/goto`   | `{"position_mm": 150.5}` | Move to position       |
+| `POST` | `/api/jog`    | `{"distance_mm": 1.0}`   | Relative jog           |
+| `POST` | `/api/lock`   | —                        | Engage latch           |
+| `POST` | `/api/unlock` | —                        | Release latch          |
+| `POST` | `/api/estop`  | —                        | Emergency stop         |
+| `POST` | `/api/reset`  | —                        | Clear error state      |
 
 ### Cut List
 
-| Method | Endpoint | Body | Description |
-|---|---|---|---|
-| `GET` | `/api/cutlist` | — | Get all cuts |
-| `POST` | `/api/cutlist` | `[{label, length_mm, quantity}]` | Replace list |
-| `POST` | `/api/cutlist/add` | `{label, length_mm, quantity}` | Add cut |
-| `DELETE` | `/api/cutlist/:index` | — | Remove cut |
-| `POST` | `/api/cutlist/clear` | — | Clear all |
-| `POST` | `/api/cutlist/reset` | — | Reset completed status |
-| `POST` | `/api/cut/start` | — | Start cut (dust + clamps) |
-| `POST` | `/api/cut/end` | — | End cut |
-| `POST` | `/api/cut/next` | — | Move to next cut |
+| Method   | Endpoint              | Body                             | Description               |
+| -------- | --------------------- | -------------------------------- | ------------------------- |
+| `GET`    | `/api/cutlist`        | —                                | Get all cuts              |
+| `POST`   | `/api/cutlist`        | `[{label, length_mm, quantity}]` | Replace list              |
+| `POST`   | `/api/cutlist/add`    | `{label, length_mm, quantity}`   | Add cut                   |
+| `DELETE` | `/api/cutlist/:index` | —                                | Remove cut                |
+| `POST`   | `/api/cutlist/clear`  | —                                | Clear all                 |
+| `POST`   | `/api/cutlist/reset`  | —                                | Reset completed status    |
+| `POST`   | `/api/cut/start`      | —                                | Start cut (dust + clamps) |
+| `POST`   | `/api/cut/end`        | —                                | End cut                   |
+| `POST`   | `/api/cut/next`       | —                                | Move to next cut          |
 
 ### Tools
 
-| Method | Endpoint | Body | Description |
-|---|---|---|---|
-| `GET` | `/api/tools` | — | List registered tools |
-| `POST` | `/api/tools` | `{uid, name, kerf_mm}` | Register tool |
-| `DELETE` | `/api/tools/:uid` | — | Remove tool |
+| Method   | Endpoint          | Body                   | Description           |
+| -------- | ----------------- | ---------------------- | --------------------- |
+| `GET`    | `/api/tools`      | —                      | List registered tools |
+| `POST`   | `/api/tools`      | `{uid, name, kerf_mm}` | Register tool         |
+| `DELETE` | `/api/tools/:uid` | —                      | Remove tool           |
 
 ### WebSocket
 
