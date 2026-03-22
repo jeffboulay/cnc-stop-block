@@ -387,6 +387,19 @@ ANY → ERROR (stall, timeout, position mismatch)
 - **Firmware guards**: Position validation, state timeouts, motion lockout during ESTOP/ERROR.
 - **Rate limiting**: All mutating API endpoints are rate-limited to 1 request per 200 ms per IP. `POST /api/estop` is explicitly exempt and is never throttled.
 
+## Security
+
+The full security review is in [`docs/SECURITY.md`](docs/SECURITY.md). All 19 findings have been resolved or explicitly accepted. Summary:
+
+| Layer | Mechanism |
+|---|---|
+| Authentication | Bearer token generated on first boot; stored in LittleFS; required on all `POST`/`DELETE` endpoints and WebSocket handshake |
+| CORS | Opt-in via `-DCORS_ORIGIN` build flag; no wildcard default |
+| WiFi credentials | Captive-portal provisioning on first boot; MAC-derived AP password; factory reset via E-Stop hold |
+| Rate limiting | 200 ms per-IP window on all mutating endpoints; HTTP 429 on violation; E-Stop exempt |
+| Transport | Plaintext HTTP/WS on local network (TLS accepted risk — see `docs/SECURITY.md` finding #6) |
+| Error messages | User-friendly messages shown in UI; raw firmware string available via collapsible Details toggle |
+
 ## Project Structure
 
 ```

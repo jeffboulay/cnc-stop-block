@@ -1,6 +1,7 @@
 export type SystemState =
   | 'BOOT'
   | 'WIFI_CONNECT'
+  | 'PROVISIONING'
   | 'NEEDS_HOMING'
   | 'HOMING'
   | 'IDLE'
@@ -32,6 +33,10 @@ export interface SystemStatus {
   cutlist_idx: number;
   cutlist_size: number;
   error?: string;
+  /** Stable code emitted by firmware alongside the raw error string.
+   *  Used by ErrorBanner to display a user-friendly message.
+   *  Values: HOMING_FAILED | FAR_LIMIT_TRIGGERED | MOVE_TIMEOUT | POSITION_ERROR | UNKNOWN */
+  error_code?: string;
   uptime_s: number;
 }
 

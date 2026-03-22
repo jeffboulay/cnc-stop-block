@@ -72,7 +72,13 @@ export function MainLayout() {
       </main>
 
       {/* Error Banner */}
-      {isError && <ErrorBanner message={status.error ?? status.state} />}
+      {isError && (
+        <ErrorBanner
+          state={status.state as 'ERROR' | 'ESTOP'}
+          errorCode={status.error_code}
+          rawError={status.error}
+        />
+      )}
     </div>
   );
 }

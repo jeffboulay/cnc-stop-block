@@ -55,10 +55,11 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 
 | Detail             |                                                                                                                                                                    |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Status**         | :x: **Open**                                                                                                                                                       |
-| **Files**          | `firmware/include/config.h`                                                                                                                                        |
+| **Status**         | :white_check_mark: **Fixed**                                                                                                                                       |
+| **Files**          | `firmware/src/WiFiProvisioning.h/.cpp`, `firmware/include/config.h`, `firmware/src/SystemController.cpp`                                                          |
 | **Impact**         | `WIFI_SSID` and `WIFI_PASSWORD` are compile-time macros with an empty default password. The AP fallback password `"stopblock"` is trivially guessable              |
 | **Recommendation** | Store credentials in LittleFS via a first-boot provisioning portal. Randomize the AP password (or derive from MAC address) and display it via serial on first boot |
+| **Solution**       | Hardcoded credentials removed entirely. On first boot (or after factory reset), device starts `CNC-StopBlock` SoftAP with a password derived from the last 4 MAC bytes (8 hex chars, unique per device). A captive-portal web page at `192.168.4.1` scans nearby networks and accepts SSID + password, which are saved to `/wifi_config.json` in LittleFS. If the saved credentials fail to connect (15 s timeout), the device falls back to AP provisioning automatically. E-Stop held for 10 s during boot triggers a factory reset that wipes credentials and the auth token. |
 
 #### 4. Unbounded POST body accumulation (DoS)
 
@@ -74,29 +75,31 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 
 | Detail             |                                                                                                                                          |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | :warning: **Partially fixed**                                                                                                            |
-| **Files**          | `firmware/src/WebAPI.cpp` — `onWebSocketEvent()`                                                                                         |
+| **Status**         | :white_check_mark: **Fixed**                                                                                                             |
+| **Files**          | `firmware/src/WebAPI.cpp`, `firmware/src/WebAPI.h`, `firmware/include/config.h`                                                          |
 | **Impact**         | No cap on concurrent WebSocket clients. No per-IP request throttling. Malicious clients can exhaust resources or flood command endpoints |
 | **Recommendation** | Reject new WebSocket connections above a threshold (e.g., 4). Add simple per-IP rate limiting on command endpoints                       |
-| **Current state**  | WebSocket client cap is implemented (`WS_MAX_CLIENTS`), but per-IP/request rate limiting is still not implemented                        |
+| **Solution**       | WebSocket client cap (`WS_MAX_CLIENTS = 4`) rejects connections above the threshold. Per-IP rate limiting added via `isRateLimited()` on all POST and DELETE endpoints (200 ms minimum gap per IP, HTTP 429 on violation). `POST /api/estop` is exempt. Rate limiting is checked before authentication to also block unauthenticated flood attempts. |
 
 #### 7. No HTTP endpoint rate limiting
 
 | Detail             |                                                                                                                                                                              |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | :x: **Open**                                                                                                                                                                 |
-| **Files**          | `firmware/src/WebAPI.cpp`                                                                                                                                                    |
+| **Status**         | :white_check_mark: **Fixed** — see finding #5 above                                                                                                                         |
+| **Files**          | `firmware/src/WebAPI.cpp`, `firmware/src/WebAPI.h`, `firmware/include/config.h`                                                                                             |
 | **Impact**         | High-frequency POST/DELETE traffic can still flood the control API even with body-size checks and WS client caps, causing CPU starvation and degraded control responsiveness |
 | **Recommendation** | Add per-IP throttling for command endpoints (e.g., 100-250ms minimum interval per client/IP), return HTTP 429 when exceeded                                                  |
+| **Solution**       | Addressed together with finding #5. Fixed-size `RateLimitEntry` table (8 slots, LRU eviction) tracks last command timestamp per client IPv4. See finding #5 for full details. |
 
 #### 6. Unencrypted WebSocket transport
 
 | Detail             |                                                                                                                                                     |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**         | :x: **Open** (accepted risk)                                                                                                                        |
+| **Status**         | :white_check_mark: **Accepted risk — documented**                                                                                                   |
 | **Files**          | `ui/src/api/websocket.ts`                                                                                                                           |
 | **Impact**         | WebSocket URL is derived by replacing `http` with `ws`, so all traffic is plaintext. Machine state and commands are visible to any network observer |
 | **Recommendation** | If TLS is added in the future, ensure the UI switches to `wss://`. Document that this is a local-network-only device                                |
+| **Accepted risk**  | TLS (HTTPS/WSS) on the ESP32 Arduino framework requires mbedTLS, which consumes approximately 50–80 KB of RAM in addition to TLS session memory. The current firmware uses 17.5% of available RAM (57 KB of 328 KB). Adding TLS would push RAM usage to ~40–50% and introduce non-trivial maintenance complexity. **Mitigations in place:** (1) bearer token authentication means commands cannot be replayed without the token; (2) the device is intended to operate on a local workshop network, not exposed to the internet; (3) if network isolation is a concern, place the ESP32 on a dedicated IoT VLAN. This risk is accepted for a v1 workshop controller and should be revisited if the device is ever used on a shared or untrusted network. |
 
 ---
 
@@ -171,7 +174,7 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 | 13  | LOW      | No security response headers  | `firmware/src/WebAPI.cpp`           | :white_check_mark: Fixed | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Cache-Control: no-store` added via `addSecurityHeaders()` |
 | 14  | LOW      | No Content Security Policy    | `ui/index.html`                     | :white_check_mark: Fixed | CSP meta tag restricts `script-src 'self'`, allows `connect-src` for WS/HTTP to ESP32                                  |
 | 15  | LOW      | Hardcoded dev proxy IP        | `ui/vite.config.ts`                 | :white_check_mark: Fixed | `VITE_PROXY_TARGET` env var (defaults to `http://192.168.1.100`)                                                       |
-| 16  | LOW      | Error messages shown directly | `ui/src/components/ErrorBanner.tsx` | :x: Open                 | Map internal error codes to user-friendly messages                                                                     |
+| 16  | LOW      | Error messages shown directly | `ui/src/components/ErrorBanner.tsx` | :white_check_mark: Fixed | Firmware now emits a stable `error_code` field alongside the raw error string. `ui/src/api/errorMessages.ts` maps codes to user-friendly title + detail text. `ErrorBanner` shows the friendly message by default with a collapsible "Details" section revealing the raw string for debugging. |
 | 17  | INFO     | No OTA update mechanism       | N/A                                 | :white_check_mark: N/A   | Good — eliminates an attack surface. If added later, require signed firmware images                                    |
 
 ---
@@ -189,44 +192,26 @@ This is a WiFi-connected ESP32 device on a local network controlling a miter saw
 
 ## Resolution Summary
 
-| Severity  | Total  | Fixed  | Open  |
-| --------- | ------ | ------ | ----- |
-| Critical  | 2      | 2      | 0     |
-| High      | 5      | 1      | 4     |
-| Medium    | 7      | 7      | 0     |
-| Low       | 5      | 4      | 1     |
-| Info      | 1      | —      | —     |
-| **Total** | **19** | **14** | **5** |
+| Severity  | Total  | Fixed | Accepted risk | Open |
+| --------- | ------ | ----- | ------------- | ---- |
+| Critical  | 2      | 2     | —             | 0    |
+| High      | 5      | 4     | 1 (#6 TLS)    | 0    |
+| Medium    | 7      | 7     | —             | 0    |
+| Low       | 5      | 5     | —             | 0    |
+| Info      | 1      | —     | —             | —    |
+| **Total** | **19** | **18** | **1**        | **0** |
 
 ---
 
-## Next Steps
+## Remediation Status
 
-### P0 — API Key Authentication (#1) — ✅ Complete
+All 19 findings have been resolved or explicitly accepted. The security remediation plan is complete.
 
-Implemented in `feat/api-auth-phase1`. See finding #1 above for full details.
+| Phase | PR | Status | Findings addressed |
+|---|---|---|---|
+| P0 — API authentication + CORS | #7 | ✅ Complete | #1, #2 |
+| P1 — WiFi provisioning | #8 | ✅ Complete | #3 |
+| P2 — Rate limiting | #9 | ✅ Complete | #5, #7 |
+| P3 — Error message mapping + TLS documentation | #10 | ✅ Complete | #6 (accepted risk), #16 |
 
-### P1 — WiFi Credential Provisioning (#3)
-
-Replace hardcoded WiFi credentials with a captive portal provisioning flow:
-
-1. **First-boot AP mode**: If no credentials are stored, start in AP mode with a password derived from the device MAC address (e.g., last 6 hex digits). Print the AP name and password to Serial
-2. **Captive portal**: Serve a minimal HTML form from LittleFS at `192.168.4.1` that scans nearby networks and accepts SSID + password
-3. **Credential storage**: Save credentials to LittleFS (not NVS, to allow factory reset by formatting the filesystem)
-4. **Factory reset**: Hold the E-Stop button for 10 seconds during boot to wipe stored credentials and return to AP mode
-
-### P2 — Per-IP Rate Limiting (#5 partial)
-
-Add simple rate limiting to command endpoints to prevent flooding:
-
-1. Track last-command timestamp per client IP (small fixed-size array of 4–8 entries)
-2. Reject commands arriving faster than 100ms from the same IP
-3. Exempt `/api/status` GET and WebSocket broadcasts
-
-### P3 — Error Message Mapping (#16)
-
-Map firmware error strings to user-friendly messages in the React UI to avoid leaking internal details:
-
-1. Define an error code enum in the firmware status JSON (e.g., `"error_code": "MOVE_TIMEOUT"`)
-2. Map codes to user-facing messages in the React UI (e.g., "The stop block took too long to reach position. Check for obstructions.")
-3. Keep raw error string available in a collapsible "Details" section for debugging
+See `docs/SECURITY-PLAN.md` for the full implementation details of each phase.
