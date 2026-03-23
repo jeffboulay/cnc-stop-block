@@ -29,7 +29,7 @@ export function TargetDisplay({ target, current }: { target: string; current: st
         background: 'var(--bg-secondary)',
         borderRadius: 10,
       }}>
-        <span style={{ fontSize: 11, letterSpacing: 1, color: 'var(--text-dim)', width: 50 }}>ERROR</span>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: 'var(--text-dim)', width: 50 }}>OFFSET</span>
         <span style={{ fontSize: 28, fontFamily: "'Courier New', monospace", fontWeight: 700, color: 'var(--yellow)' }}>
           {error.toFixed(2)}
         </span>
