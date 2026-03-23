@@ -11,10 +11,12 @@ credentials.h
 # React UI
 ui/node_modules/
 ui/dist/
+ui/.env.local
 *.tsbuildinfo
 
 # Simulator
 sim/node_modules/
+sim/.env
 
 # IDE / Tools
 .vscode/
